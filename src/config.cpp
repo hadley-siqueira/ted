@@ -43,7 +43,8 @@ void load_config() {
     };
     auto as_int = [&]() { return std::atoi(val.c_str()); };
 
-    if (key == "tab_width") g_config.tab_width = as_int();
+    if (key == "theme" || key == "tema") g_config.theme = val;
+    else if (key == "tab_width") g_config.tab_width = as_int();
     else if (key == "use_spaces") g_config.use_spaces = as_bool();
     else if (key == "auto_indent") g_config.auto_indent = as_bool();
     else if (key == "line_numbers") g_config.show_line_numbers = as_bool();

@@ -58,6 +58,12 @@ App::App(const std::string& root, const std::vector<std::string>& files)
   if (tabs_.empty()) new_tab();
   message_ = "F1 mostra a ajuda com todos os atalhos.";
   message_ttl_ = 400;
+
+  if (!theme_exists(g_config.theme)) {
+    message("Tema \"" + g_config.theme +
+                "\" nao existe (use: ted --themes). Usando o padrao.",
+            true);
+  }
 }
 
 EditorView* App::active() {

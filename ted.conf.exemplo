@@ -2,6 +2,24 @@
 # Copie para ~/.config/ted/ted.conf e ajuste o que quiser.
 # Uma opcao por linha, no formato "chave = valor". '#' comeca um comentario.
 
+# ---------------------------------------------------------------------------
+# Paleta de cores
+# ---------------------------------------------------------------------------
+# Descomente UMA das linhas abaixo. Para experimentar sem editar este arquivo,
+# rode "ted --theme nord" (e "ted --themes" lista todas).
+#
+# theme = default          # cores padrao do terminal (fundo transparente)
+# theme = rose-pine        # Rose Pine: escuro, tons de vinho e lilas
+# theme = rose-pine-dawn   # Rose Pine Dawn: a versao clara (boa em projetor)
+# theme = dracula          # Dracula: escuro, roxo e rosa
+# theme = gruvbox          # Gruvbox: escuro, quente, com ar retro
+# theme = nord             # Nord: escuro, azul acinzentado e frio
+
+theme = default
+
+# ---------------------------------------------------------------------------
+# Edicao
+# ---------------------------------------------------------------------------
 tab_width = 4          # largura visual do TAB
 use_spaces = true      # TAB insere espacos (recomendado para a turma)
 auto_indent = true     # mantem a indentacao ao apertar Enter
@@ -9,6 +27,9 @@ auto_close = true      # fecha (), [], {}, "" e '' automaticamente
 line_numbers = true    # mostra os numeros das linhas
 mouse = true           # clique, arrasto e roda do mouse
 
+# ---------------------------------------------------------------------------
+# Paineis
+# ---------------------------------------------------------------------------
 sidebar_width = 26     # largura do painel de arquivos
 terminal_height = 10   # altura do terminal embutido
 show_sidebar = true

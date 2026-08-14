@@ -13,6 +13,7 @@
 
 #include "app.hpp"
 #include "config.hpp"
+#include "theme.hpp"
 #include "ui.hpp"
 
 namespace {
@@ -26,6 +27,8 @@ void print_usage(const char* prog) {
       "opcoes:\n"
       "  -h, --help       mostra esta ajuda\n"
       "  -v, --version    mostra a versao\n"
+      "  --theme NOME     usa uma paleta de cores (ignora a do ted.conf)\n"
+      "  --themes         lista as paletas disponiveis\n"
       "\n"
       "dentro do editor, F1 mostra todos os atalhos.\n",
       prog);
@@ -66,11 +69,18 @@ std::string absolute_path(const std::string& p) {
 int main(int argc, char** argv) {
   std::vector<std::string> files;
   std::string root;
+  std::string theme_arg;
 
   for (int i = 1; i < argc; i++) {
     std::string a = argv[i];
     if (a == "-h" || a == "--help") { print_usage(argv[0]); return 0; }
     if (a == "-v" || a == "--version") { std::printf("ted 1.0\n"); return 0; }
+    if (a == "--themes") {   // lista as paletas disponiveis
+      for (const std::string& n : theme_names()) std::printf("%s\n", n.c_str());
+      return 0;
+    }
+    if (a.rfind("--theme=", 0) == 0) { theme_arg = a.substr(8); continue; }
+    if (a == "--theme" && i + 1 < argc) { theme_arg = argv[++i]; continue; }
     if (!a.empty() && a[0] == '-') {
       std::fprintf(stderr, "opcao desconhecida: %s\n", a.c_str());
       return 2;
@@ -96,6 +106,7 @@ int main(int argc, char** argv) {
   if (root.empty()) root = ".";
 
   load_config();
+  if (!theme_arg.empty()) g_config.theme = theme_arg;   // -- theme vence o conf
 
   if (!ui::init()) {
     std::fprintf(stderr, "nao foi possivel iniciar o terminal (ncurses).\n");

@@ -5,6 +5,8 @@
 
 #include <string>
 
+#include "theme.hpp"
+
 struct Rect {
   int x = 0, y = 0, w = 0, h = 0;
   bool contains(int px, int py) const {
@@ -82,6 +84,9 @@ struct KeyEvent {
            ch == static_cast<wint_t>(letter - 'A' + 1);
   }
 };
+
+// Monta os pares de cor a partir de uma paleta (veja theme.hpp).
+void apply_theme(const Theme& t);
 
 bool init();
 void shutdown();

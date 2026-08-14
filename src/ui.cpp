@@ -58,7 +58,91 @@ void bind_modified_keys() {
   bind("\033[201~", K_PASTE_END);
 }
 
+// Em terminais de 8 cores nao da para reproduzir uma paleta: usamos um
+// esquema simples e legivel para qualquer tema escolhido.
+void apply_basic_theme() {
+  pair(kNormal, -1, -1);
+  pair(kStatus, COLOR_WHITE, COLOR_BLUE);
+  pair(kStatusKey, COLOR_YELLOW, COLOR_BLUE);
+  pair(kSidebar, COLOR_WHITE, COLOR_BLACK);
+  pair(kSidebarDir, COLOR_CYAN, COLOR_BLACK);
+  pair(kSidebarSel, COLOR_BLACK, COLOR_CYAN);
+  pair(kSidebarSelInactive, COLOR_WHITE, COLOR_BLACK);
+  pair(kTabBar, COLOR_WHITE, COLOR_BLACK);
+  pair(kTabActive, COLOR_WHITE, COLOR_BLUE);
+  pair(kTabModified, COLOR_YELLOW, COLOR_BLACK);
+  pair(kLineNo, COLOR_BLUE, -1);
+  pair(kLineNoCur, COLOR_WHITE, -1);
+  pair(kSelection, COLOR_WHITE, COLOR_BLUE);
+  pair(kSearchHit, COLOR_BLACK, COLOR_YELLOW);
+  pair(kDialog, COLOR_WHITE, COLOR_BLUE);
+  pair(kPaneTitle, COLOR_WHITE, COLOR_BLACK);
+  pair(kPaneTitleActive, COLOR_WHITE, COLOR_BLUE);
+  pair(kSynKeyword, COLOR_MAGENTA, -1);
+  pair(kSynType, COLOR_CYAN, -1);
+  pair(kSynString, COLOR_GREEN, -1);
+  pair(kSynComment, COLOR_BLUE, -1);
+  pair(kSynNumber, COLOR_YELLOW, -1);
+  pair(kSynPreproc, COLOR_YELLOW, -1);
+  pair(kSynOperator, COLOR_WHITE, -1);
+}
+
 }  // namespace
+
+void apply_theme(const Theme& t) {
+  if (!has_colors()) return;
+  if (COLORS < 256) {
+    apply_basic_theme();
+    return;
+  }
+  auto c = [](Color x) { return x == kDefaultColor ? -1 : rgb_to_256(x); };
+  const int bg = c(t.bg), fg = c(t.fg);
+  const int dim = c(t.fg_dim);
+  const int accent = c(t.accent), accent_fg = c(t.accent_fg);
+
+  // Paletas costumam usar tons de fundo muito proximos (no Rose Pine, o fundo
+  // do editor e o da barra lateral diferem em 6 pontos de brilho). Depois de
+  // reduzir para 256 cores eles podem virar o mesmo indice, e a divisao entre
+  // os paineis desapareceria - por isso o empurrao abaixo.
+  auto distinct = [&](Color want) {
+    int idx = c(want);
+    if (bg >= 0 && idx == bg)
+      idx = nudge_256(idx, luminance(want) >= luminance(t.bg));
+    return idx;
+  };
+  const int bg_alt = distinct(t.bg_alt);
+  const int bg_sel = distinct(t.bg_sel);
+
+  pair(kNormal, fg, bg);
+  pair(kStatus, accent_fg, accent);
+  pair(kStatusKey, c(t.modified), accent);
+  pair(kSidebar, fg, bg_alt);
+  pair(kSidebarDir, c(t.accent2), bg_alt);
+  pair(kSidebarSel, accent_fg, accent);
+  pair(kSidebarSelInactive, fg, bg_sel);
+  pair(kTabBar, dim, bg_alt);
+  pair(kTabActive, accent_fg, accent);
+  pair(kTabModified, c(t.modified), bg_alt);
+  pair(kLineNo, dim, bg);
+  pair(kLineNoCur, fg, bg);
+  pair(kSelection, fg, bg_sel);
+  pair(kSearchHit, c(t.search_fg), c(t.search_bg));
+  pair(kDialog, fg, bg_sel);
+  pair(kPaneTitle, dim, bg_alt);
+  pair(kPaneTitleActive, accent_fg, accent);
+
+  pair(kSynKeyword, c(t.keyword), bg);
+  pair(kSynType, c(t.type), bg);
+  pair(kSynString, c(t.string), bg);
+  pair(kSynComment, c(t.comment), bg);
+  pair(kSynNumber, c(t.number), bg);
+  pair(kSynPreproc, c(t.preproc), bg);
+  pair(kSynOperator, c(t.punct), bg);
+
+  // Faz o fundo do tema valer para a tela inteira (inclusive o que o erase()
+  // limpa a cada redesenho).
+  bkgd(' ' | COLOR_PAIR(kNormal));
+}
 
 bool init() {
   std::setlocale(LC_ALL, "");
@@ -76,38 +160,7 @@ bool init() {
   if (has_colors()) {
     start_color();
     use_default_colors();
-    bool rich = COLORS >= 256;
-
-    const int bg_side = rich ? 234 : COLOR_BLACK;
-    const int bg_status = rich ? 24 : COLOR_BLUE;
-    const int bg_tab = rich ? 236 : COLOR_BLACK;
-    const int sel_bg = rich ? 60 : COLOR_BLUE;
-
-    pair(kNormal, -1, -1);
-    pair(kStatus, rich ? 253 : COLOR_WHITE, bg_status);
-    pair(kStatusKey, rich ? 228 : COLOR_YELLOW, bg_status);
-    pair(kSidebar, rich ? 250 : COLOR_WHITE, bg_side);
-    pair(kSidebarDir, rich ? 111 : COLOR_CYAN, bg_side);
-    pair(kSidebarSel, rich ? 232 : COLOR_BLACK, rich ? 111 : COLOR_CYAN);
-    pair(kSidebarSelInactive, rich ? 252 : COLOR_WHITE, rich ? 238 : COLOR_BLACK);
-    pair(kTabBar, rich ? 245 : COLOR_WHITE, bg_tab);
-    pair(kTabActive, rich ? 231 : COLOR_WHITE, rich ? 24 : COLOR_BLUE);
-    pair(kTabModified, rich ? 215 : COLOR_YELLOW, bg_tab);
-    pair(kLineNo, rich ? 242 : COLOR_BLUE, -1);
-    pair(kLineNoCur, rich ? 250 : COLOR_WHITE, -1);
-    pair(kSelection, rich ? 255 : COLOR_WHITE, sel_bg);
-    pair(kSearchHit, rich ? 232 : COLOR_BLACK, rich ? 220 : COLOR_YELLOW);
-    pair(kDialog, rich ? 231 : COLOR_WHITE, rich ? 238 : COLOR_BLUE);
-    pair(kPaneTitle, rich ? 244 : COLOR_WHITE, bg_tab);
-    pair(kPaneTitleActive, rich ? 231 : COLOR_WHITE, rich ? 24 : COLOR_BLUE);
-
-    pair(kSynKeyword, rich ? 205 : COLOR_MAGENTA, -1);
-    pair(kSynType, rich ? 80 : COLOR_CYAN, -1);
-    pair(kSynString, rich ? 150 : COLOR_GREEN, -1);
-    pair(kSynComment, rich ? 244 : COLOR_BLUE, -1);
-    pair(kSynNumber, rich ? 216 : COLOR_YELLOW, -1);
-    pair(kSynPreproc, rich ? 179 : COLOR_YELLOW, -1);
-    pair(kSynOperator, rich ? 252 : COLOR_WHITE, -1);
+    apply_theme(theme_by_name(g_config.theme));
   }
 
   bind_modified_keys();

@@ -12,6 +12,7 @@
 #include <cstdlib>
 #include <cstring>
 
+#include "theme.hpp"
 #include "utf8.hpp"
 
 namespace {
@@ -675,14 +676,7 @@ void Terminal::apply_sgr() {
         } else if (mode == 2) {
           int r = param(i + 2, 0), g = param(i + 3, 0), b = param(i + 4, 0);
           i += 4;
-          // Converte RGB para a paleta de 256 cores (cubo 6x6x6 + cinzas).
-          if (std::abs(r - g) < 12 && std::abs(g - b) < 12) {
-            int gray = (r + g + b) / 3;
-            color = gray < 8 ? 16 : (gray > 248 ? 231 : 232 + (gray - 8) * 24 / 240);
-          } else {
-            color = static_cast<short>(16 + 36 * (r * 5 / 255) +
-                                       6 * (g * 5 / 255) + (b * 5 / 255));
-          }
+          color = static_cast<short>(rgb_to_256(r, g, b));
         }
         if (p == 38) fg_ = color; else bg_ = color;
         break;
@@ -735,7 +729,7 @@ void Terminal::draw(const Rect& area, bool focused) {
       if (hist >= 0 && hist < sb) line = &scrollback_[hist];
     }
 
-    attrset(COLOR_PAIR(ui::kNormal));
+    attrset(COLOR_PAIR(ui::terminal_pair(-1, -1)));
     ui::fill(y, area.x, area.w);
     if (!line) continue;
 

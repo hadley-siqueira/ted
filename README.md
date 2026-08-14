@@ -37,6 +37,7 @@ Para instalar para a turma toda: `sudo make install PREFIX=/usr/local`.
 ted                 # abre a pasta atual
 ted main.c          # abre o arquivo (a pasta atual vira o "projeto")
 ted ~/exercicios    # abre uma pasta
+ted --theme nord    # abre com outra paleta de cores
 ```
 
 Dentro do editor, **F1 mostra todos os atalhos**.
@@ -104,11 +105,33 @@ continuam sendo do editor, para você conseguir sair de lá.
 - `Ctrl+V`: colar o que você copiou no editor.
 - Se o shell fechar (`exit`), o painel mostra "encerrado"; `Enter` reinicia.
 
+## Cores
+
+Vem com seis paletas. Escolha no `ted.conf` (`theme = nord`) ou experimente na
+hora com `ted --theme nord`; `ted --themes` lista todas.
+
+| Nome | Como é |
+|---|---|
+| `default` | cores padrão do terminal, fundo transparente |
+| `rose-pine` | escuro, tons de vinho e lilás |
+| `rose-pine-dawn` | a versão clara do Rosé Pine — boa em projetor |
+| `dracula` | escuro, roxo e rosa |
+| `gruvbox` | escuro, quente, com ar retrô |
+| `nord` | escuro, azul acinzentado e frio |
+
+As paletas são escritas em RGB (`src/theme.cpp`) e convertidas para a cor mais
+próxima entre as 256 do terminal, então funcionam em qualquer emulador com 256
+cores, sem precisar reconfigurá-lo. Em terminais de 8 cores o editor cai num
+esquema simples e legível. Para criar a sua, copie um bloco em `src/theme.cpp`,
+troque os valores e recompile — o nome novo já aparece em `--themes`.
+
 ## Configuração (opcional)
 
-Crie `~/.config/ted/ted.conf` com uma opção por linha:
+Crie `~/.config/ted/ted.conf` com uma opção por linha (há um modelo completo em
+`ted.conf.exemplo`):
 
 ```ini
+theme = rose-pine      # paleta de cores (ted --themes lista as opções)
 tab_width = 4          # largura do TAB
 use_spaces = true      # TAB insere espaços
 auto_indent = true     # mantém a indentação no Enter
@@ -135,6 +158,7 @@ Cada arquivo cuida de uma coisa só — dá para ler um por vez com a turma:
 | `src/highlight.*` | realce de sintaxe (C, C++, Python, JS/JSX, HTML, CSS, Shell, Markdown) |
 | `src/ui.*` | ncurses: cores, teclas com modificadores, mouse |
 | `src/app.*` | layout dos painéis, loop de eventos e atalhos |
+| `src/theme.*` | paletas de cores e conversão RGB → 256 cores |
 | `src/config.*` | opções do `ted.conf` |
 
 Detalhes que valem uma aula: o texto é um `vector<string>` (uma linha por

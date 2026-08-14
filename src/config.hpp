@@ -4,6 +4,7 @@
 #include <string>
 
 struct Config {
+  std::string theme = "default";   // paleta de cores (veja theme.cpp)
   int tab_width = 4;          // largura visual do TAB
   bool use_spaces = true;     // TAB insere espacos (mais previsivel p/ alunos)
   bool auto_indent = true;    // mantem a indentacao ao apertar Enter
