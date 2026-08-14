@@ -1,5 +1,6 @@
 #include "app.hpp"
 
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include <algorithm>
@@ -24,14 +25,45 @@ std::string expand_path(const std::string& p, const std::string& root) {
   return root + "/" + p;
 }
 
+// Acima disso o editor recusa abrir: o desfazer guarda uma copia do arquivo a
+// cada grupo de edicao, entao um arquivo de centenas de MB consumiria toda a
+// memoria da maquina e daria a impressao de travamento.
+constexpr long kMaxFileSize = 16L * 1024 * 1024;
+
+long file_size(const std::string& path) {
+  struct stat st;
+  if (stat(path.c_str(), &st) != 0) return -1;
+  return static_cast<long>(st.st_size);
+}
+
+// Um arquivo e "binario" se tiver byte zero ou muito caractere de controle no
+// comeco. So procurar por '\0' deixa passar coisas como .zip e .jpg, que nao
+// tem zeros logo no inicio.
 bool looks_binary(const std::string& path) {
   std::ifstream in(path, std::ios::binary);
   if (!in) return false;
-  char buf[4096];
-  in.read(buf, sizeof(buf));
-  std::streamsize n = in.gcount();
-  for (std::streamsize i = 0; i < n; i++)
-    if (buf[i] == '\0') return true;
+
+  auto suspicious = [&](std::streamoff at) {
+    char buf[4096];
+    in.clear();
+    in.seekg(at);
+    in.read(buf, sizeof(buf));
+    std::streamsize n = in.gcount();
+    int control = 0;
+    for (std::streamsize i = 0; i < n; i++) {
+      unsigned char c = static_cast<unsigned char>(buf[i]);
+      if (c == '\0') return true;
+      if (c < 32 && c != '\t' && c != '\n' && c != '\r' && c != '\f' && c != 27)
+        control++;
+    }
+    return n > 0 && control * 10 > static_cast<int>(n);   // mais de 10%
+  };
+
+  if (suspicious(0)) return true;
+  // Alguns arquivos comecam com texto e viram binario depois (PDF, por
+  // exemplo), entao damos uma segunda olhada no meio.
+  const long size = file_size(path);
+  if (size > 65536 && suspicious(size / 2)) return true;
   return false;
 }
 
@@ -58,8 +90,10 @@ App::App(const std::string& root, const std::vector<std::string>& files)
     : tree_(root) {
   for (const auto& f : files) open_file(expand_path(f, tree_.root()));
   if (tabs_.empty()) new_tab();
-  message_ = "F1 mostra a ajuda com todos os atalhos.";
-  message_ttl_ = 400;
+  if (!message_error_) {   // nao apaga um aviso vindo de open_file()
+    message_ = "F1 mostra a ajuda com todos os atalhos.";
+    message_ttl_ = 400;
+  }
 
   if (!theme_exists(g_config.theme)) {
     message("Tema \"" + g_config.theme +
@@ -194,10 +228,11 @@ void App::draw_statusbar() {
       right += "  [sel]";
     }
     right += "  " + lang_name(v->language());
-    right += g_config.use_spaces
-                 ? "  Espacos:" + std::to_string(g_config.tab_width)
-                 : "  Tab:" + std::to_string(g_config.tab_width);
+    right += v->uses_tabs()
+                 ? "  Tab:" + std::to_string(g_config.tab_width)
+                 : "  Espacos:" + std::to_string(g_config.tab_width);
     if (v->overwrite()) right += "  SOBRESCREVER";
+    if (literal_next_) right += "  ^K";
   }
 
   const int rw = utf8::width(right, 4);
@@ -235,7 +270,7 @@ void App::draw_help() {
       "Alt+S   salvar como              Ctrl+A  selecionar tudo",
       "Ctrl+O  abrir    Ctrl+N  novo    Ctrl+Z / Ctrl+Y  desfazer / refazer",
       "Ctrl+W  fechar aba               Ctrl+D  duplicar a linha",
-      "                                 Ctrl+/ (ou Alt+C)  comenta a selecao",
+      "Ctrl+K  insere a tecla literal   Ctrl+/ (ou Alt+C)  comenta a selecao",
       "Ctrl+Q  sair  (ou F10)           Tab / Shift+Tab  indenta / desindenta",
       "Ctrl+PgUp/PgDn  troca de aba     Alt+Shift+Cima/Baixo  move a linha",
       "",
@@ -515,9 +550,19 @@ void App::open_file(const std::string& path) {
       return;
     }
   }
-  if (access(path.c_str(), F_OK) == 0 && looks_binary(path)) {
-    message("Arquivo binario - nao da para editar aqui.", true);
-    return;
+  if (access(path.c_str(), F_OK) == 0) {
+    const long size = file_size(path);
+    if (size > kMaxFileSize) {
+      message("Arquivo muito grande (" + std::to_string(size / (1024 * 1024)) +
+                  " MB). O ted abre ate " +
+                  std::to_string(kMaxFileSize / (1024 * 1024)) + " MB.",
+              true);
+      return;
+    }
+    if (looks_binary(path)) {
+      message("Arquivo binario - nao da para editar aqui.", true);
+      return;
+    }
   }
 
   auto doc = std::make_shared<Document>();
@@ -1007,6 +1052,11 @@ void App::handle_editor_key(const ui::KeyEvent& ev) {
     return;
   }
   if (ev.ctrl('D')) { v->duplicate_line(); return; }
+  if (ev.ctrl('K')) {
+    literal_next_ = true;
+    message("Ctrl+K: a proxima tecla entra como caractere (Tab = TAB real).");
+    return;
+  }
   // Ctrl+/ chega como o caractere 31 na maioria dos terminais; Alt+C fica
   // como alternativa para os que nao mandam nada.
   if ((!ev.is_code && !ev.alt && ev.ch == 31) ||
@@ -1064,6 +1114,19 @@ void App::handle_key(const ui::KeyEvent& ev) {
     show_help_ = false;
     return;
   }
+  // O literal vem antes de tudo: e justamente para escapar dos atalhos.
+  if (literal_next_ && !ev.is_mouse) {
+    literal_next_ = false;
+    EditorView* v = active();
+    if (!v || focus_ != Focus::Editor) return;
+    if (ev.is_code) {
+      message("Essa tecla nao tem um caractere para inserir.", true);
+      return;
+    }
+    v->insert_literal(utf8::encode(static_cast<uint32_t>(ev.ch)));
+    return;
+  }
+
   if (picker_.active()) {
     // KEY_RESIZE precisa passar para o layout se ajustar.
     if (!(ev.is_code && static_cast<int>(ev.ch) == KEY_RESIZE)) {

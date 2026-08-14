@@ -33,8 +33,12 @@ void paint(std::vector<int>* out, size_t from, size_t to, int color) {
   for (size_t k = from; k < to && k < out->size(); k++) (*out)[k] = color;
 }
 
+// Atencao: todo caractere aceito por ident_start() precisa ser aceito por
+// ident_char(), senao a regra de identificador nao consome nada e o scanner
+// fica parado no mesmo byte. O '$' aparece em $(CXX) do Make, $HOME do shell
+// e $elemento do JavaScript.
 bool ident_char(char c) {
-  return std::isalnum(static_cast<unsigned char>(c)) || c == '_';
+  return std::isalnum(static_cast<unsigned char>(c)) || c == '_' || c == '$';
 }
 bool ident_start(char c) {
   return std::isalpha(static_cast<unsigned char>(c)) || c == '_' || c == '$';
@@ -363,7 +367,13 @@ int Highlighter::scan_code(const std::string& line, size_t from, size_t to,
     }
   }
 
+  size_t last_i = to + 1;   // onde estavamos na iteracao anterior
   while (i < to) {
+    // Se alguma regra nao consumiu nenhum byte, anda um para nao travar o
+    // editor. Serve de rede para qualquer regra nova que erre a conta.
+    if (i == last_i) { i++; continue; }
+    last_i = i;
+
     const char c = line[i];
 
     // Comentarios.
@@ -561,6 +571,7 @@ size_t Highlighter::scan_attributes(const std::string& line, size_t i, size_t to
       size_t j = i;
       while (j < to && (ident_char(line[j]) || std::strchr("-:.@", line[j])))
         j++;
+      if (j == i) { i++; continue; }   // nunca fica parado
       paint(out, i, j, ui::kSynType);
       i = j;
       continue;

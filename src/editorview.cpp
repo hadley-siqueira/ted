@@ -261,6 +261,24 @@ int EditorView::cursor_col() const {
 // Edicao
 // ---------------------------------------------------------------------------
 
+std::string EditorView::indent_unit() const {
+  // O make so aceita TAB no inicio das regras, entao ali ignoramos o
+  // use_spaces do ted.conf.
+  if (hl_.lang() == Lang::Make || !g_config.use_spaces) return "\t";
+  return std::string(static_cast<size_t>(g_config.tab_width), ' ');
+}
+
+void EditorView::insert_literal(const std::string& text) {
+  if (text.empty()) return;
+  bool had_sel = has_selection();
+  doc_->begin_edit(had_sel ? EditKind::Other : EditKind::Typing, cursor_);
+  if (had_sel) erase_selection_raw();
+  cursor_ = doc_->insert(cursor_, text);
+  desired_col_ = utf8::byte_to_col(doc_->line(cursor_.line), cursor_.byte,
+                                   g_config.tab_width);
+  ensure_visible();
+}
+
 std::string EditorView::indent_of(const std::string& line) const {
   size_t i = 0;
   while (i < line.size() && (line[i] == ' ' || line[i] == '\t')) i++;
@@ -293,10 +311,7 @@ void EditorView::insert_newline() {
       before.pop_back();
     bool deeper = !before.empty() && (before.back() == '{' || before.back() == ':');
     ins += ind;
-    if (deeper) {
-      ins += g_config.use_spaces ? std::string(g_config.tab_width, ' ')
-                                 : std::string("\t");
-    }
+    if (deeper) ins += indent_unit();
     // Se o cursor esta entre '{' e '}', a chave de fechar desce mais uma linha.
     const std::string& after_src = doc_->line(cursor_.line);
     bool closing_ahead = cursor_.byte < after_src.size() &&
@@ -459,9 +474,7 @@ void EditorView::indent_selection(bool remove) {
   if (has_selection() && sel_end().byte == 0 && last > first) last--;
 
   doc_->begin_edit(EditKind::Other, cursor_);
-  std::string unit = g_config.use_spaces
-                         ? std::string(g_config.tab_width, ' ')
-                         : std::string("\t");
+  std::string unit = indent_unit();
   for (int l = first; l <= last; l++) {
     const std::string& line = doc_->line(l);
     if (remove) {
@@ -605,7 +618,7 @@ void EditorView::insert_tab() {
     indent_selection(false);
     return;
   }
-  if (!g_config.use_spaces) { insert_text("\t"); return; }
+  if (indent_unit() == "\t") { insert_text("\t"); return; }
   int col = utf8::byte_to_col(doc_->line(cursor_.line), cursor_.byte,
                               g_config.tab_width);
   int n = g_config.tab_width - (col % g_config.tab_width);

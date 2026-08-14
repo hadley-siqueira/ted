@@ -64,6 +64,7 @@ Dentro do editor, **F1 mostra todos os atalhos**.
 | `Ctrl+D` | duplicar a linha |
 | `Ctrl+/` (ou `Alt+C`) | comentar/descomentar a linha ou a seleção |
 | `Tab` / `Shift+Tab` | indentar / desindentar (funciona na seleção) |
+| `Ctrl+K` | insere a próxima tecla como caractere (`Ctrl+K` `Tab` = TAB de verdade) |
 | `Alt+Shift+↑/↓` | mover a linha para cima/baixo |
 | `Insert` | alterna inserir/sobrescrever |
 
@@ -72,6 +73,20 @@ ou `<!-- -->`), alinha o marcador na indentação do bloco e pula linhas em
 branco. Se todas as linhas selecionadas já estiverem comentadas, ele
 descomenta. Alguns terminais não enviam nada com `Ctrl+/` — nesses, use
 `Alt+C`.
+
+**TAB ou espaços?** Por padrão a tecla `Tab` insere espaços (`tab_width`, 4 por
+padrão) — mais previsível para quem está começando. Duas exceções e um escape:
+
+- **Makefiles usam TAB de verdade**, sempre, independente da configuração: a
+  sintaxe do `make` exige TAB no início das regras e recusa espaços com
+  `*** faltando o separador`. Vale para `Tab`, para a indentação da seleção e
+  para o `Enter` com indentação automática.
+- Se preferir TAB em tudo, ponha `use_spaces = false` no `ted.conf`.
+- Para um TAB avulso, sem mexer na configuração, use `Ctrl+K` e depois `Tab` —
+  é o `Ctrl+V` do vim: a próxima tecla entra como caractere, sem passar pelos
+  atalhos. Enquanto o editor espera essa tecla, aparece `^K` na barra de
+  status. A barra também mostra `Tab:4` ou `Espacos:4` conforme o arquivo
+  aberto, então dá para conferir o modo de relance.
 
 ### Busca e navegação
 | Tecla | O que faz |
@@ -265,6 +280,9 @@ embutido é um emulador VT de verdade (`terminal.cpp`), que lê os bytes do
 ## Limitações conhecidas
 
 - Um cursor só (sem multi-cursor) e sem quebra automática de linha longa.
+- Abre arquivos de texto de até 16 MB. O desfazer guarda uma cópia do arquivo a
+  cada grupo de edição, então arquivos muito maiores consumiriam a memória da
+  máquina; arquivos binários também são recusados, com aviso.
 - O realce de sintaxe é por expressões simples, não um parser de verdade. Em
   particular: no JSX, `<` só vira tag quando aparece onde um valor pode
   começar (para não colorir `a < b`); e no CSS uma declaração que se espalhe

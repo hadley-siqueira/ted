@@ -82,6 +82,11 @@ class App {
   bool message_error_ = false;
   int message_ttl_ = 0;      // em ciclos de redesenho
 
+  // Ctrl+K: a proxima tecla entra como caractere, sem interpretacao (o
+  // "literal next" do vim). Serve para digitar um TAB de verdade num arquivo
+  // configurado para espacos.
+  bool literal_next_ = false;
+
   bool quit_ = false;
   bool show_help_ = false;
   bool needs_redraw_ = true;

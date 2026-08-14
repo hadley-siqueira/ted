@@ -178,9 +178,14 @@ std::vector<std::string> FileTree::list_all_files(size_t limit,
       if (is_noise(name)) continue;
       std::string rel = rel_dir.empty() ? name : rel_dir + "/" + name;
       if (is_binary_name(name)) continue;
+      // Nao descemos em link simbolico: um link para uma pasta acima ("ln -s
+      // .. atalho") faria a varredura andar em circulo para sempre.
+      if (e->d_type == DT_LNK) {
+        if (!is_dir_path(abs + "/" + name)) files.push_back(rel);
+        continue;
+      }
       bool dir = (e->d_type == DT_DIR);
-      if (e->d_type == DT_UNKNOWN || e->d_type == DT_LNK)
-        dir = is_dir_path(abs + "/" + name);
+      if (e->d_type == DT_UNKNOWN) dir = is_dir_path(abs + "/" + name);
       (dir ? dirs : files).push_back(rel);
     }
     closedir(d);

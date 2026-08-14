@@ -26,6 +26,13 @@ class EditorView {
   Lang language() const { return hl_.lang(); }
   void refresh_language();
 
+  // O que uma indentacao insere neste arquivo: TAB ou espacos. Makefile e
+  // sempre TAB - a sintaxe do make exige, espacos nao funcionam.
+  std::string indent_unit() const;
+  bool uses_tabs() const { return indent_unit() == "\t"; }
+  // Insere um caractere sem nenhuma esperteza (usado pelo Ctrl+K).
+  void insert_literal(const std::string& text);
+
   // ---- desenho -----------------------------------------------------------
   void draw(const Rect& area, bool focused);
   // Onde o cursor de verdade deve aparecer (calculado no ultimo draw).
