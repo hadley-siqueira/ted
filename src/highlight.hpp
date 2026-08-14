@@ -12,6 +12,16 @@ enum class Lang {
   None, C, Cpp, Python, JavaScript, Shell, Make, Markdown, Json, Html, Css, Sql
 };
 
+// Como se comenta em cada linguagem. 'line' vazio significa que a linguagem
+// nao tem comentario de linha (CSS e HTML, por exemplo) - ai usa-se o bloco.
+struct CommentSyntax {
+  std::string line;         // "//", "#", "--"
+  std::string block_open;   // "/*", "<!--"
+  std::string block_close;  // "*/", "-->"
+  bool empty() const { return line.empty() && block_open.empty(); }
+};
+CommentSyntax comment_syntax(Lang lang);
+
 class Highlighter {
  public:
   static Lang detect(const std::string& path);

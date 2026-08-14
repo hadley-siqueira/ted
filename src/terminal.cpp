@@ -165,8 +165,8 @@ void Terminal::resize(int cols, int rows) {
   rows_ = rows;
   scroll_top_ = 0;
   scroll_bot_ = rows_ - 1;
-  cx_ = std::min(cx_, cols_ - 1);
-  cy_ = std::min(cy_, rows_ - 1);
+  cx_ = std::max(0, std::min(cx_, cols_ - 1));
+  cy_ = std::max(0, std::min(cy_, rows_ - 1));
 
   if (master_ >= 0) {
     struct winsize ws;
@@ -189,7 +189,11 @@ void Terminal::resize_screen(std::vector<std::vector<Cell>>* screen, int cols,
     int copy_cols = std::min<int>(cols, static_cast<int>(src.size()));
     for (int c = 0; c < copy_cols; c++) out[r][c] = src[c];
   }
-  if (screen == &screen_) cy_ -= src_start;
+  // O cursor acompanha as linhas preservadas. Se ele estava acima delas (o
+  // painel encolheu e a linha do cursor foi descartada), ele gruda no topo -
+  // sem o piso aqui, cy_ ficaria negativo e o proximo ESC[K acessaria
+  // screen_[-1].
+  if (screen == &screen_) cy_ = std::max(0, cy_ - src_start);
   *screen = std::move(out);
 }
 
@@ -394,7 +398,7 @@ void Terminal::put_codepoint(uint32_t cp) {
   if (cy_ < 0) cy_ = 0;
   if (cy_ >= rows_) cy_ = rows_ - 1;
 
-  auto& row = screen_[cy_];
+  auto& row = row_at(cy_);
   Cell cell;
   cell.ch = utf8::encode(cp);
   cell.fg = fg_;
@@ -481,7 +485,8 @@ void Terminal::dispatch_esc(unsigned char c) {
       saved_fg_ = fg_; saved_bg_ = bg_; saved_attrs_ = attrs_;
       break;
     case '8':
-      cx_ = saved_cx_; cy_ = saved_cy_;
+      cx_ = std::max(0, std::min(saved_cx_, cols_ - 1));
+      cy_ = std::max(0, std::min(saved_cy_, rows_ - 1));
       fg_ = saved_fg_; bg_ = saved_bg_; attrs_ = saved_attrs_;
       break;
     case 'c':   // reset
@@ -538,7 +543,10 @@ void Terminal::dispatch_csi(unsigned char final_ch) {
       cy_ = scroll_top_;
       break;
     case 's': saved_cx_ = cx_; saved_cy_ = cy_; break;
-    case 'u': cx_ = saved_cx_; cy_ = saved_cy_; break;
+    case 'u':
+      cx_ = std::max(0, std::min(saved_cx_, cols_ - 1));
+      cy_ = std::max(0, std::min(saved_cy_, rows_ - 1));
+      break;
     case 'n':
       if (param(0, 0) == 6) {   // pedido de posicao do cursor
         char buf[32];
@@ -580,8 +588,8 @@ void Terminal::use_alt_screen(bool alt) {
     cx_ = cy_ = 0;
   } else {
     std::swap(screen_, alt_);
-    cx_ = std::min(saved_cx_, cols_ - 1);
-    cy_ = std::min(saved_cy_, rows_ - 1);
+    cx_ = std::max(0, std::min(saved_cx_, cols_ - 1));
+    cy_ = std::max(0, std::min(saved_cy_, rows_ - 1));
   }
   in_alt_ = alt;
   scroll_top_ = 0;
@@ -589,13 +597,23 @@ void Terminal::use_alt_screen(bool alt) {
   view_offset_ = 0;
 }
 
+// Linha da tela com o indice preso ao intervalo valido. Todas as operacoes
+// que escrevem em screen_[cy_] passam por aqui: se algum caminho deixar o
+// cursor fora da tela, o resultado e um desenho errado - nunca um acesso
+// invalido de memoria.
+std::vector<Terminal::Cell>& Terminal::row_at(int y) {
+  if (y < 0) y = 0;
+  if (y >= static_cast<int>(screen_.size())) y = static_cast<int>(screen_.size()) - 1;
+  return screen_[y];
+}
+
 void Terminal::erase_display(int mode) {
   Cell b = blank_cell();
   if (mode == 0) {
-    for (int c = cx_; c < cols_; c++) screen_[cy_][c] = b;
+    for (int c = cx_; c < cols_; c++) row_at(cy_)[c] = b;
     for (int r = cy_ + 1; r < rows_; r++) screen_[r].assign(cols_, b);
   } else if (mode == 1) {
-    for (int c = 0; c <= cx_ && c < cols_; c++) screen_[cy_][c] = b;
+    for (int c = 0; c <= cx_ && c < cols_; c++) row_at(cy_)[c] = b;
     for (int r = 0; r < cy_; r++) screen_[r].assign(cols_, b);
   } else {
     for (int r = 0; r < rows_; r++) screen_[r].assign(cols_, b);
@@ -605,11 +623,11 @@ void Terminal::erase_display(int mode) {
 void Terminal::erase_line(int mode) {
   Cell b = blank_cell();
   if (mode == 0) {
-    for (int c = cx_; c < cols_; c++) screen_[cy_][c] = b;
+    for (int c = cx_; c < cols_; c++) row_at(cy_)[c] = b;
   } else if (mode == 1) {
-    for (int c = 0; c <= cx_ && c < cols_; c++) screen_[cy_][c] = b;
+    for (int c = 0; c <= cx_ && c < cols_; c++) row_at(cy_)[c] = b;
   } else {
-    screen_[cy_].assign(cols_, b);
+    row_at(cy_).assign(cols_, b);
   }
 }
 
@@ -630,7 +648,7 @@ void Terminal::delete_lines(int n) {
 }
 
 void Terminal::insert_chars(int n) {
-  auto& row = screen_[cy_];
+  auto& row = row_at(cy_);
   for (int k = 0; k < n; k++) {
     for (int c = cols_ - 1; c > cx_; c--) row[c] = row[c - 1];
     row[cx_] = blank_cell();
@@ -638,7 +656,7 @@ void Terminal::insert_chars(int n) {
 }
 
 void Terminal::delete_chars(int n) {
-  auto& row = screen_[cy_];
+  auto& row = row_at(cy_);
   for (int k = 0; k < n; k++) {
     for (int c = cx_; c < cols_ - 1; c++) row[c] = row[c + 1];
     row[cols_ - 1] = blank_cell();
@@ -646,7 +664,7 @@ void Terminal::delete_chars(int n) {
 }
 
 void Terminal::erase_chars(int n) {
-  auto& row = screen_[cy_];
+  auto& row = row_at(cy_);
   for (int c = cx_; c < std::min(cols_, cx_ + n); c++) row[c] = blank_cell();
 }
 

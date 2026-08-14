@@ -62,9 +62,16 @@ Dentro do editor, **F1 mostra todos os atalhos**.
 | `Ctrl+A` | selecionar tudo |
 | `Ctrl+Z` / `Ctrl+Y` | desfazer / refazer |
 | `Ctrl+D` | duplicar a linha |
+| `Ctrl+/` (ou `Alt+C`) | comentar/descomentar a linha ou a seleção |
 | `Tab` / `Shift+Tab` | indentar / desindentar (funciona na seleção) |
 | `Alt+Shift+↑/↓` | mover a linha para cima/baixo |
 | `Insert` | alterna inserir/sobrescrever |
+
+O `Ctrl+/` usa o comentário certo para cada linguagem (`//`, `#`, `--`, `/* */`
+ou `<!-- -->`), alinha o marcador na indentação do bloco e pula linhas em
+branco. Se todas as linhas selecionadas já estiverem comentadas, ele
+descomenta. Alguns terminais não enviam nada com `Ctrl+/` — nesses, use
+`Alt+C`.
 
 ### Busca e navegação
 | Tecla | O que faz |

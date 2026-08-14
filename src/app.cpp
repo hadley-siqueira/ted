@@ -235,6 +235,7 @@ void App::draw_help() {
       "Alt+S   salvar como              Ctrl+A  selecionar tudo",
       "Ctrl+O  abrir    Ctrl+N  novo    Ctrl+Z / Ctrl+Y  desfazer / refazer",
       "Ctrl+W  fechar aba               Ctrl+D  duplicar a linha",
+      "                                 Ctrl+/ (ou Alt+C)  comenta a selecao",
       "Ctrl+Q  sair  (ou F10)           Tab / Shift+Tab  indenta / desindenta",
       "Ctrl+PgUp/PgDn  troca de aba     Alt+Shift+Cima/Baixo  move a linha",
       "",
@@ -1006,6 +1007,14 @@ void App::handle_editor_key(const ui::KeyEvent& ev) {
     return;
   }
   if (ev.ctrl('D')) { v->duplicate_line(); return; }
+  // Ctrl+/ chega como o caractere 31 na maioria dos terminais; Alt+C fica
+  // como alternativa para os que nao mandam nada.
+  if ((!ev.is_code && !ev.alt && ev.ch == 31) ||
+      (ev.alt && (ev.ch == 'c' || ev.ch == 'C'))) {
+    if (!v->toggle_comment())
+      message("Este tipo de arquivo nao tem comentario.", true);
+    return;
+  }
 
   if (ev.is_code) {
     switch (static_cast<int>(ev.ch)) {

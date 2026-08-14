@@ -489,6 +489,117 @@ void EditorView::indent_selection(bool remove) {
   ensure_visible();
 }
 
+// Comenta/descomenta as linhas tocadas pela selecao. A regra e a mesma dos
+// editores graficos: se *todas* as linhas ja estao comentadas, descomenta;
+// senao, comenta todas - alinhando o marcador na menor indentacao do bloco,
+// para o codigo nao ficar torto.
+bool EditorView::toggle_comment() {
+  const CommentSyntax cs = comment_syntax(hl_.lang());
+  if (cs.empty()) return false;
+
+  int first = has_selection() ? sel_begin().line : cursor_.line;
+  int last = has_selection() ? sel_end().line : cursor_.line;
+  if (has_selection() && sel_end().byte == 0 && last > first) last--;
+
+  auto indent_end = [&](const std::string& s) {
+    size_t i = s.find_first_not_of(" \t");
+    return i == std::string::npos ? s.size() : i;
+  };
+
+  // Linhas em branco no meio do bloco nao entram (nem para comentar nem para
+  // decidir se o bloco ja esta comentado).
+  std::vector<int> lines;
+  size_t indent = std::string::npos;
+  for (int l = first; l <= last; l++) {
+    const std::string& s = doc_->line(l);
+    if (indent_end(s) == s.size()) continue;   // so espacos
+    lines.push_back(l);
+    indent = std::min(indent, indent_end(s));
+  }
+  if (lines.empty()) {          // selecao so com linhas vazias: usa a atual
+    lines.push_back(cursor_.line);
+    indent = indent_end(doc_->line(cursor_.line));
+  }
+
+  const bool use_line = !cs.line.empty();
+  const std::string open = use_line ? cs.line : cs.block_open;
+
+  // Ja esta tudo comentado?
+  bool all_commented = true;
+  for (int l : lines) {
+    const std::string& s = doc_->line(l);
+    size_t i = indent_end(s);
+    if (s.compare(i, open.size(), open) != 0) { all_commented = false; break; }
+    if (!use_line) {
+      size_t e = s.find_last_not_of(" \t");
+      if (e == std::string::npos ||
+          e + 1 < cs.block_close.size() ||
+          s.compare(e + 1 - cs.block_close.size(), cs.block_close.size(),
+                    cs.block_close) != 0) {
+        all_commented = false;
+        break;
+      }
+    }
+  }
+
+  doc_->begin_edit(EditKind::Other, cursor_);
+
+  // Move o cursor/ancora junto com o texto que entrou ou saiu antes deles.
+  auto shift = [&](Pos* p, int line, size_t at, int delta) {
+    if (p->line != line) return;
+    if (delta > 0) {
+      if (p->byte >= at) p->byte += static_cast<size_t>(delta);
+    } else {
+      size_t removed = static_cast<size_t>(-delta);
+      if (p->byte > at) p->byte -= std::min(removed, p->byte - at);
+    }
+  };
+
+  for (int l : lines) {
+    const std::string& s = doc_->line(l);
+    const size_t i = indent_end(s);
+
+    if (all_commented) {
+      // --- descomentar ---
+      size_t n = open.size();
+      if (s.size() > i + n && s[i + n] == ' ') n++;   // tira o espaco tambem
+      doc_->erase(Pos{l, i}, Pos{l, i + n});
+      shift(&cursor_, l, i, -static_cast<int>(n));
+      shift(&sel_anchor_, l, i, -static_cast<int>(n));
+      if (!use_line) {
+        const std::string& s2 = doc_->line(l);
+        size_t e = s2.find_last_not_of(" \t");
+        if (e != std::string::npos && e + 1 >= cs.block_close.size()) {
+          size_t start = e + 1 - cs.block_close.size();
+          size_t from = (start > 0 && s2[start - 1] == ' ') ? start - 1 : start;
+          doc_->erase(Pos{l, from}, Pos{l, e + 1});
+          shift(&cursor_, l, from, -static_cast<int>(e + 1 - from));
+          shift(&sel_anchor_, l, from, -static_cast<int>(e + 1 - from));
+        }
+      }
+    } else {
+      // --- comentar ---
+      const size_t at = std::min(indent, i);
+      const std::string text = open + " ";
+      doc_->insert(Pos{l, at}, text);
+      shift(&cursor_, l, at, static_cast<int>(text.size()));
+      shift(&sel_anchor_, l, at, static_cast<int>(text.size()));
+      if (!use_line) {
+        const std::string& s2 = doc_->line(l);
+        const std::string tail = " " + cs.block_close;
+        doc_->insert(Pos{l, s2.size()}, tail);
+      }
+    }
+  }
+
+  cursor_ = doc_->clamp(cursor_);
+  sel_anchor_ = doc_->clamp(sel_anchor_);
+  desired_col_ = utf8::byte_to_col(doc_->line(cursor_.line), cursor_.byte,
+                                   g_config.tab_width);
+  ensure_visible();
+  return true;
+}
+
 void EditorView::insert_tab() {
   if (has_selection() && sel_begin().line != sel_end().line) {
     indent_selection(false);

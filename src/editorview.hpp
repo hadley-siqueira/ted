@@ -37,6 +37,9 @@ class EditorView {
   void insert_text(const std::string& text);   // usado tambem pelo "colar"
   void delete_line();                          // usado pelo "recortar linha"
   void duplicate_line();                       // Ctrl+D
+  // Comenta ou descomenta as linhas da selecao (Ctrl+/). Devolve false se a
+  // linguagem do arquivo nao tem comentario (texto puro, JSON).
+  bool toggle_comment();
 
   // ---- selecao e area de transferencia -----------------------------------
   bool has_selection() const { return sel_active_ && sel_anchor_ != cursor_; }

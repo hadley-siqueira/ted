@@ -208,6 +208,22 @@ bool jsx_context(const std::string& line, size_t from, size_t lt) {
 
 }  // namespace
 
+CommentSyntax comment_syntax(Lang lang) {
+  switch (lang) {
+    case Lang::C:
+    case Lang::Cpp:
+    case Lang::JavaScript: return {"//", "/*", "*/"};
+    case Lang::Python:
+    case Lang::Shell:
+    case Lang::Make: return {"#", "", ""};
+    case Lang::Sql: return {"--", "/*", "*/"};
+    case Lang::Css: return {"", "/*", "*/"};
+    case Lang::Html:
+    case Lang::Markdown: return {"", "<!--", "-->"};
+    default: return {"", "", ""};   // texto puro e JSON nao tem comentario
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Deteccao da linguagem pelo nome do arquivo
 // ---------------------------------------------------------------------------

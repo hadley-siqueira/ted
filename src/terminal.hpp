@@ -73,6 +73,7 @@ class Terminal {
   void resize_screen(std::vector<std::vector<Cell>>* screen, int cols, int rows);
   void use_alt_screen(bool alt);
   Cell blank_cell() const;
+  std::vector<Cell>& row_at(int y);   // linha da tela, indice sempre valido
   int param(size_t i, int def) const;
 
   // --- processo -----------------------------------------------------------
