@@ -9,6 +9,7 @@
 
 #include "editorview.hpp"
 #include "filetree.hpp"
+#include "picker.hpp"
 #include "terminal.hpp"
 #include "ui.hpp"
 
@@ -47,6 +48,12 @@ class App {
   void save(bool ask_name);
   void do_save(const std::string& path);
 
+  // --- fuzzy finder (Ctrl+P) e busca nos abertos (Ctrl+T) ---
+  void open_file_picker();
+  void open_text_picker();
+  std::vector<PickerItem> filter_files(const std::string& query);
+  std::vector<PickerItem> search_open_files(const std::string& query);
+
   // --- prompts ------------------------------------------------------------
   using PromptCb = std::function<void(bool ok, const std::string& value)>;
   void ask(const std::string& label, const std::string& initial, PromptCb cb);
@@ -64,6 +71,9 @@ class App {
   std::vector<std::unique_ptr<EditorView>> tabs_;
   int active_tab_ = 0;
   Terminal term_;
+  Picker picker_;
+  std::vector<std::string> file_cache_;   // caminhos relativos, para o Ctrl+P
+  bool file_cache_truncated_ = false;
   Focus focus_ = Focus::Editor;
   Focus focus_before_prompt_ = Focus::Editor;
 

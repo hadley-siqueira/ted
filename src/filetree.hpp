@@ -32,6 +32,11 @@ class FileTree {
   void scroll_by(int lines);
 
   void refresh();
+
+  // Lista recursivamente os arquivos do projeto (caminhos relativos a raiz),
+  // respeitando as mesmas regras de "o que esconder" do painel. Usada pelo
+  // Ctrl+P. Para em 'limit' arquivos e avisa em *truncated.
+  std::vector<std::string> list_all_files(size_t limit, bool* truncated) const;
   void reveal(const std::string& path);   // expande ate o arquivo e seleciona
   const std::string& root() const { return root_; }
   bool show_hidden() const { return show_hidden_; }

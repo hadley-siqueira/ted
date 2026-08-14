@@ -26,6 +26,23 @@ std::string base_name(const std::string& p) {
   return slash == std::string::npos ? q : q.substr(slash + 1);
 }
 
+// Arquivos gerados ou binarios: aparecem no painel (porque existem), mas nao
+// entram na lista do Ctrl+P - o editor recusaria abri-los de qualquer jeito.
+bool is_binary_name(const std::string& name) {
+  static const char* kExts[] = {
+      "o", "d", "a", "so", "obj", "lib", "exe", "dll", "class", "pyc", "pyo",
+      "png", "jpg", "jpeg", "gif", "bmp", "ico", "svgz", "pdf", "zip", "gz",
+      "xz", "bz2", "7z", "tar", "mp3", "mp4", "wav", "ogg", "ttf", "otf",
+      "woff", "woff2", "bin", "iso", "jar"};
+  size_t dot = name.find_last_of('.');
+  if (dot == std::string::npos || dot + 1 >= name.size()) return false;
+  std::string ext = name.substr(dot + 1);
+  for (char& c : ext) c = static_cast<char>(tolower((unsigned char)c));
+  for (const char* e : kExts)
+    if (ext == e) return true;
+  return false;
+}
+
 // Pastas que quase nunca interessam ao aluno.
 bool is_noise(const std::string& name) {
   static const char* kNoise[] = {".git", "node_modules", "__pycache__",
@@ -139,6 +156,46 @@ void FileTree::refresh() {
     for (size_t i = 0; i < visible_.size(); i++)
       if (visible_[i]->path == sel_path) { selected_ = static_cast<int>(i); break; }
   }
+}
+
+std::vector<std::string> FileTree::list_all_files(size_t limit,
+                                                  bool* truncated) const {
+  std::vector<std::string> out;
+  if (truncated) *truncated = false;
+
+  // Percorre em largura: os arquivos do topo do projeto aparecem primeiro.
+  std::vector<std::string> queue{std::string()};   // caminhos relativos
+  for (size_t q = 0; q < queue.size(); q++) {
+    const std::string& rel_dir = queue[q];
+    std::string abs = rel_dir.empty() ? root_ : root_ + "/" + rel_dir;
+    DIR* d = opendir(abs.c_str());
+    if (!d) continue;
+    std::vector<std::string> files, dirs;
+    while (dirent* e = readdir(d)) {
+      std::string name = e->d_name;
+      if (name == "." || name == "..") continue;
+      if (!show_hidden_ && !name.empty() && name[0] == '.') continue;
+      if (is_noise(name)) continue;
+      std::string rel = rel_dir.empty() ? name : rel_dir + "/" + name;
+      if (is_binary_name(name)) continue;
+      bool dir = (e->d_type == DT_DIR);
+      if (e->d_type == DT_UNKNOWN || e->d_type == DT_LNK)
+        dir = is_dir_path(abs + "/" + name);
+      (dir ? dirs : files).push_back(rel);
+    }
+    closedir(d);
+    std::sort(files.begin(), files.end());
+    std::sort(dirs.begin(), dirs.end());
+    for (auto& f : files) {
+      if (out.size() >= limit) {
+        if (truncated) *truncated = true;
+        return out;
+      }
+      out.push_back(f);
+    }
+    for (auto& s : dirs) queue.push_back(s);
+  }
+  return out;
 }
 
 void FileTree::reveal(const std::string& path) {

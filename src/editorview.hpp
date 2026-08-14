@@ -50,6 +50,8 @@ class EditorView {
   Pos cursor() const { return cursor_; }
   void set_cursor(Pos p, bool extend_selection = false);
   void goto_line(int line_1based);
+  // Seleciona um trecho e traz para a tela (usado pela busca do Ctrl+T).
+  void select_range(Pos a, Pos b);
   void ensure_visible();
 
   // ---- busca -------------------------------------------------------------

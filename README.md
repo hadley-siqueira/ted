@@ -69,6 +69,8 @@ Dentro do editor, **F1 mostra todos os atalhos**.
 ### Busca e navegação
 | Tecla | O que faz |
 |---|---|
+| `Ctrl+P` | abrir arquivo digitando parte do nome (busca *fuzzy*) |
+| `Ctrl+T` | procurar um texto em todos os arquivos abertos |
 | `Ctrl+F` | buscar (`F3` = próxima, `Shift+F3` = anterior) |
 | `Ctrl+R` | substituir tudo |
 | `Ctrl+G` | ir para uma linha |
@@ -89,6 +91,22 @@ Dentro do editor, **F1 mostra todos os atalhos**.
 
 Na barra de arquivos: `↑↓` navega, `→`/`Enter` abre a pasta ou o arquivo,
 `←` fecha a pasta, `.` mostra/esconde arquivos ocultos.
+
+### Achar arquivos e trechos rapidamente
+
+`Ctrl+P` abre uma caixa onde você digita **pedaços** do nome: `edvw` acha
+`src/editorview.cpp`, `apph` acha `src/app.hpp`. As letras precisam aparecer na
+ordem, mas não coladas — quem casa melhor (letras juntas, começo de palavra,
+nome do arquivo em vez da pasta) aparece primeiro. Arquivos gerados e binários
+(`.o`, `.png`, `.zip`…) ficam de fora da lista.
+
+`Ctrl+T` faz o contrário: procura um **texto** dentro dos arquivos que você já
+abriu e lista `arquivo:linha` com o trecho. Aqui a busca é literal, igual à do
+`Ctrl+F` — só diferencia maiúsculas se você digitar alguma. `Enter` pula para a
+linha com o trecho já selecionado.
+
+Nas duas caixas: `↑↓` navega, `PgUp`/`PgDn` pula de tela, `Enter` confirma,
+`Esc` fecha, `Ctrl+U` limpa o que você digitou e o mouse também funciona.
 
 O **mouse** funciona: clicar posiciona o cursor, arrastar seleciona, a roda
 rola, clicar em um arquivo o abre, clicar numa aba a ativa e um clique duplo
@@ -222,6 +240,8 @@ Cada arquivo cuida de uma coisa só — dá para ler um por vez com a turma:
 | `src/document.*` | o texto de um arquivo: linhas, edição, desfazer, salvar |
 | `src/editorview.*` | o painel de código: cursor, seleção, rolagem, desenho |
 | `src/filetree.*` | a barra lateral de pastas e arquivos |
+| `src/picker.*` | a caixa flutuante de busca com lista (Ctrl+P e Ctrl+T) |
+| `src/fuzzy.*` | o casamento e a pontuação da busca por nome |
 | `src/terminal.*` | o terminal embutido: PTY + emulador VT100/xterm |
 | `src/highlight.*` | realce de sintaxe (C, C++, Python, JS/JSX, HTML, CSS, SQL, Shell, Markdown) |
 | `src/ui.*` | ncurses: cores, teclas com modificadores, mouse |

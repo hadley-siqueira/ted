@@ -8,6 +8,7 @@
 #include <fstream>
 
 #include "config.hpp"
+#include "fuzzy.hpp"
 #include "utf8.hpp"
 
 namespace {
@@ -238,13 +239,13 @@ void App::draw_help() {
       "Ctrl+PgUp/PgDn  troca de aba     Alt+Shift+Cima/Baixo  move a linha",
       "",
       "BUSCA E NAVEGACAO                PAINEIS",
-      "Ctrl+F  buscar                   F2/F3/F4  arquivos, editor, terminal",
-      "F3 / Shift+F3  proxima / ant.    F6  alterna entre os paineis",
-      "Ctrl+R  substituir tudo          Ctrl+B/Ctrl+J  esconde arquivos/terminal",
-      "Ctrl+G  ir para a linha          Alt+Setas  redimensiona os paineis",
-      "Ctrl+Setas  anda por palavra     F5 recarrega a lista de arquivos",
-      "Shift+Setas  seleciona           F9 liga/desliga o mouse",
-      "Home/End, PgUp/PgDn              Shift+PgUp/PgDn  historico do terminal",
+      "Ctrl+P  abrir arquivo pelo nome  F2/F3/F4  arquivos, editor, terminal",
+      "Ctrl+T  procurar nos abertos     F6  alterna entre os paineis",
+      "Ctrl+F  buscar no arquivo        Ctrl+B/Ctrl+J  esconde arquivos/terminal",
+      "F3 / Shift+F3  proxima / ant.    Alt+Setas  redimensiona os paineis",
+      "Ctrl+R  substituir tudo          F5 recarrega arquivos  F9 mouse on/off",
+      "Ctrl+G  ir para a linha          Shift+PgUp/PgDn  historico do terminal",
+      "Ctrl+Setas por palavra, Shift+Setas seleciona, Home/End, PgUp/PgDn",
       "",
       "No terminal tudo vai para o shell (inclusive Ctrl+C). F4/F6 saem de la.",
       "Qualquer tecla fecha esta ajuda.",
@@ -317,6 +318,7 @@ void App::draw() {
   }
 
   draw_statusbar();
+  if (picker_.active()) picker_.draw(screen_w_, screen_h_);
   if (show_help_) draw_help();
   place_cursor();
   refresh();
@@ -326,6 +328,15 @@ void App::place_cursor() {
   int x = 0, y = 0;
   if (show_help_) {
     curs_set(0);
+    return;
+  }
+  if (picker_.active()) {
+    if (picker_.cursor_screen(&x, &y)) {
+      move(y, x);
+      curs_set(1);
+    } else {
+      curs_set(0);
+    }
     return;
   }
   if (prompt_active_) {
@@ -602,6 +613,121 @@ void App::save(bool ask_name) {
 }
 
 // ---------------------------------------------------------------------------
+// Fuzzy finder de arquivos (Ctrl+P) e busca nos arquivos abertos (Ctrl+T)
+// ---------------------------------------------------------------------------
+
+namespace {
+constexpr size_t kMaxProjectFiles = 20000;
+constexpr size_t kMaxPickerResults = 300;
+constexpr size_t kMaxSearchResults = 500;
+}  // namespace
+
+std::vector<PickerItem> App::filter_files(const std::string& query) {
+  std::vector<PickerItem> out;
+  out.reserve(std::min(file_cache_.size(), kMaxPickerResults));
+
+  std::vector<size_t> positions;
+  int score = 0;
+  for (const std::string& rel : file_cache_) {
+    if (!fuzzy_match(rel, query, &score, &positions)) continue;
+    PickerItem item;
+    item.label = rel;
+    item.match = positions;
+    item.score = score;
+    item.path = tree_.root() + "/" + rel;
+    out.push_back(std::move(item));
+  }
+  // Nota maior primeiro; empate resolve pelo caminho mais curto (costuma ser
+  // o arquivo "principal") e depois em ordem alfabetica.
+  std::sort(out.begin(), out.end(), [](const PickerItem& a, const PickerItem& b) {
+    if (a.score != b.score) return a.score > b.score;
+    if (a.label.size() != b.label.size()) return a.label.size() < b.label.size();
+    return a.label < b.label;
+  });
+  if (out.size() > kMaxPickerResults) out.resize(kMaxPickerResults);
+  return out;
+}
+
+void App::open_file_picker() {
+  file_cache_ = tree_.list_all_files(kMaxProjectFiles, &file_cache_truncated_);
+  if (file_cache_.empty()) {
+    message("Nenhum arquivo encontrado em " + tree_.root(), true);
+    return;
+  }
+  if (file_cache_truncated_)
+    message("Projeto grande: mostrando os primeiros " +
+            std::to_string(kMaxProjectFiles) + " arquivos.");
+
+  picker_.open("Abrir arquivo", "digite parte do nome do arquivo",
+               [this](const std::string& q) { return filter_files(q); },
+               [this](const PickerItem& item) { open_file(item.path); });
+  needs_redraw_ = true;
+}
+
+std::vector<PickerItem> App::search_open_files(const std::string& query) {
+  std::vector<PickerItem> out;
+  if (query.empty()) return out;
+
+  // Mesma regra do Ctrl+F: so diferencia maiusculas se voce digitar alguma.
+  const bool case_sensitive =
+      std::any_of(query.begin(), query.end(),
+                  [](unsigned char c) { return std::isupper(c); });
+  auto fold = [&](std::string s) {
+    if (!case_sensitive)
+      for (char& c : s) c = static_cast<char>(std::tolower((unsigned char)c));
+    return s;
+  };
+  const std::string needle = fold(query);
+
+  for (size_t t = 0; t < tabs_.size(); t++) {
+    Document& d = tabs_[t]->doc();
+    const std::string name = d.display_name();
+    for (int l = 0; l < d.line_count(); l++) {
+      const std::string& line = d.line(l);
+      size_t p = fold(line).find(needle);
+      if (p == std::string::npos) continue;
+
+      // Rotulo: "arquivo:linha  trecho da linha (sem a indentacao)".
+      std::string trecho = line;
+      size_t first = trecho.find_first_not_of(" \t");
+      size_t removed = (first == std::string::npos) ? 0 : first;
+      trecho = (first == std::string::npos) ? std::string() : trecho.substr(first);
+
+      const std::string prefix = name + ":" + std::to_string(l + 1) + "  ";
+      PickerItem item;
+      item.label = prefix + trecho;
+      for (size_t k = 0; k < needle.size(); k++)
+        item.match.push_back(prefix.size() + (p - removed) + k);
+      item.tab = static_cast<int>(t);
+      item.line = l;
+      item.col = p;
+      item.len = needle.size();
+      out.push_back(std::move(item));
+      if (out.size() >= kMaxSearchResults) return out;
+    }
+  }
+  return out;
+}
+
+void App::open_text_picker() {
+  std::string hint = "procurar em " + std::to_string(tabs_.size()) +
+                     (tabs_.size() == 1 ? " arquivo aberto" : " arquivos abertos");
+  picker_.open("Procurar texto", hint,
+               [this](const std::string& q) { return search_open_files(q); },
+               [this](const PickerItem& item) {
+                 if (item.tab < 0 || item.tab >= static_cast<int>(tabs_.size()))
+                   return;
+                 active_tab_ = item.tab;
+                 set_focus(Focus::Editor);
+                 EditorView* v = active();
+                 if (!v) return;
+                 v->select_range(Pos{item.line, item.col},
+                                 Pos{item.line, item.col + item.len});
+               });
+  needs_redraw_ = true;
+}
+
+// ---------------------------------------------------------------------------
 // Teclado
 // ---------------------------------------------------------------------------
 
@@ -788,6 +914,8 @@ void App::handle_editor_key(const ui::KeyEvent& ev) {
     return;
   }
   if (ev.ctrl('N')) { new_tab(); return; }
+  if (ev.ctrl('P')) { open_file_picker(); return; }
+  if (ev.ctrl('T')) { open_text_picker(); return; }
   if (ev.ctrl('W')) { close_tab(); return; }
   if (ev.ctrl('A')) { v->select_all(); return; }
   if (ev.ctrl('C')) {
@@ -926,6 +1054,13 @@ void App::handle_key(const ui::KeyEvent& ev) {
   if (show_help_) {
     show_help_ = false;
     return;
+  }
+  if (picker_.active()) {
+    // KEY_RESIZE precisa passar para o layout se ajustar.
+    if (!(ev.is_code && static_cast<int>(ev.ch) == KEY_RESIZE)) {
+      picker_.handle_key(ev);
+      return;
+    }
   }
   if (ev.is_mouse) {
     if (prompt_active_) return;   // com um prompt aberto o mouse nao age

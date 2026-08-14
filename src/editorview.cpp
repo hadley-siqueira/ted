@@ -218,6 +218,18 @@ void EditorView::goto_line(int line_1based) {
   ensure_visible();
 }
 
+void EditorView::select_range(Pos a, Pos b) {
+  sel_anchor_ = doc_->clamp(a);
+  cursor_ = doc_->clamp(b);
+  sel_active_ = (sel_anchor_ != cursor_);
+  desired_col_ = utf8::byte_to_col(doc_->line(cursor_.line), cursor_.byte,
+                                   g_config.tab_width);
+  if (area_.h > 0 &&
+      (cursor_.line < scroll_row_ || cursor_.line >= scroll_row_ + area_.h))
+    scroll_row_ = std::max(0, cursor_.line - area_.h / 2);
+  ensure_visible();
+}
+
 void EditorView::ensure_visible() {
   if (area_.h <= 0 || area_.w <= 0) return;
   if (cursor_.line < scroll_row_) scroll_row_ = cursor_.line;
