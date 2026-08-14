@@ -132,7 +132,7 @@ Cada arquivo cuida de uma coisa só — dá para ler um por vez com a turma:
 | `src/editorview.*` | o painel de código: cursor, seleção, rolagem, desenho |
 | `src/filetree.*` | a barra lateral de pastas e arquivos |
 | `src/terminal.*` | o terminal embutido: PTY + emulador VT100/xterm |
-| `src/highlight.*` | realce de sintaxe (C, C++, Python, JS, Shell, Markdown) |
+| `src/highlight.*` | realce de sintaxe (C, C++, Python, JS/JSX, HTML, CSS, Shell, Markdown) |
 | `src/ui.*` | ncurses: cores, teclas com modificadores, mouse |
 | `src/app.*` | layout dos painéis, loop de eventos e atalhos |
 | `src/config.*` | opções do `ted.conf` |
@@ -146,7 +146,10 @@ embutido é um emulador VT de verdade (`terminal.cpp`), que lê os bytes do
 ## Limitações conhecidas
 
 - Um cursor só (sem multi-cursor) e sem quebra automática de linha longa.
-- O realce de sintaxe é por expressões simples, não um parser de verdade.
+- O realce de sintaxe é por expressões simples, não um parser de verdade. Em
+  particular: no JSX, `<` só vira tag quando aparece onde um valor pode
+  começar (para não colorir `a < b`); e no CSS uma declaração que se espalhe
+  por várias linhas perde o contexto de "valor" na linha seguinte.
 - O emulador de terminal cobre o essencial (cores, tela alternativa, regiões
   de rolagem). Programas muito exóticos podem desenhar torto.
 - A área de transferência é interna ao editor; para trocar texto com outros

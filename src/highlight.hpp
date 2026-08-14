@@ -8,7 +8,9 @@
 #include <string>
 #include <vector>
 
-enum class Lang { None, C, Cpp, Python, JavaScript, Shell, Make, Markdown, Json };
+enum class Lang {
+  None, C, Cpp, Python, JavaScript, Shell, Make, Markdown, Json, Html, Css
+};
 
 class Highlighter {
  public:
@@ -19,13 +21,45 @@ class Highlighter {
   Lang lang() const { return lang_; }
   bool enabled() const { return lang_ != Lang::None; }
 
-  // Estados que atravessam linhas.
-  enum State { kNormal = 0, kBlockComment = 1, kPyString1 = 2, kPyString2 = 3 };
+  // Estados que atravessam linhas. O estado que entra e sai de highlight() e
+  // um inteiro com dois campos: os 8 bits de baixo sao um destes valores e os
+  // 8 bits de cima guardam o estado da linguagem *embutida* (o CSS ou o
+  // JavaScript que vive dentro de um arquivo HTML).
+  enum State {
+    kNormal = 0,
+    kBlockComment,      // /* ... */ de C, C++, JS e CSS fora de um bloco
+    kPyString1,         // ''' ... ''' do Python
+    kPyString2,         // """ ... """ do Python
+    kJsTemplate,        // `...` do JavaScript
+    kHtmlComment,       // <!-- ... -->
+    kHtmlTag,           // dentro de <tag ...> ainda sem o '>'
+    kHtmlTagScript,     // idem, e a tag aberta e <script>
+    kHtmlTagStyle,      // idem, e a tag aberta e <style>
+    kHtmlScript,        // conteudo de <script>: destacado como JavaScript
+    kHtmlStyle,         // conteudo de <style>: destacado como CSS
+    kCssBlock,          // dentro das { } de uma regra CSS
+    kCssBlockComment,   // /* ... */ dentro das { } de uma regra CSS
+  };
 
   // Preenche 'out' (uma cor por byte, 0 = cor normal) e devolve o estado
   // que vale para a proxima linha.
   int highlight(const std::string& line, int state_in, std::vector<int>* out) const;
 
  private:
+  // Cada scanner pinta o trecho [from, to) da linha e devolve o estado final.
+  // Sao separados porque o HTML chama os outros dois para o conteudo de
+  // <style> e <script>.
+  int scan_code(const std::string& line, size_t from, size_t to, int state_in,
+                std::vector<int>* out, Lang lang) const;
+  int scan_css(const std::string& line, size_t from, size_t to, int state_in,
+               std::vector<int>* out) const;
+  int scan_html(const std::string& line, int state_in, std::vector<int>* out) const;
+  int scan_markdown(const std::string& line, std::vector<int>* out) const;
+
+  // Pinta atributos (nome=valor) ate encontrar '>' ou '/>'. Em JSX tambem
+  // para em '{', devolvendo o controle para o scanner de JavaScript.
+  size_t scan_attributes(const std::string& line, size_t i, size_t to,
+                         std::vector<int>* out, bool* closed, bool html) const;
+
   Lang lang_ = Lang::None;
 };

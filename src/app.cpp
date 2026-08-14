@@ -44,6 +44,8 @@ std::string lang_name(Lang l) {
     case Lang::Make: return "Make";
     case Lang::Markdown: return "Markdown";
     case Lang::Json: return "JSON";
+    case Lang::Html: return "HTML";
+    case Lang::Css: return "CSS";
     default: return "Texto";
   }
 }
