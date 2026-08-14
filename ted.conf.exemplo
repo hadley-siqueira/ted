@@ -1,0 +1,15 @@
+# Exemplo de configuracao do ted.
+# Copie para ~/.config/ted/ted.conf e ajuste o que quiser.
+# Uma opcao por linha, no formato "chave = valor". '#' comeca um comentario.
+
+tab_width = 4          # largura visual do TAB
+use_spaces = true      # TAB insere espacos (recomendado para a turma)
+auto_indent = true     # mantem a indentacao ao apertar Enter
+auto_close = true      # fecha (), [], {}, "" e '' automaticamente
+line_numbers = true    # mostra os numeros das linhas
+mouse = true           # clique, arrasto e roda do mouse
+
+sidebar_width = 26     # largura do painel de arquivos
+terminal_height = 10   # altura do terminal embutido
+show_sidebar = true
+show_terminal = true
