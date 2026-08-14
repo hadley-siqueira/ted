@@ -183,7 +183,7 @@ void App::draw_statusbar() {
     if (v->has_selection()) {
       right += "  [sel]";
     }
-    right += "  " + lang_name(Highlighter::detect(v->doc().path()));
+    right += "  " + lang_name(v->language());
     right += g_config.use_spaces
                  ? "  Espacos:" + std::to_string(g_config.tab_width)
                  : "  Tab:" + std::to_string(g_config.tab_width);
@@ -569,6 +569,9 @@ void App::do_save(const std::string& path) {
     message(err, true);
     return;
   }
+  // O arquivo pode ter ganhado nome agora (ou outro nome): o realce de
+  // sintaxe precisa acompanhar a nova extensao.
+  v->refresh_language();
   message("Salvo: " + v->doc().display_name());
   tree_.refresh();
   tree_.reveal(path);

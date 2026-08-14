@@ -21,6 +21,11 @@ class EditorView {
   const Document& doc() const { return *doc_; }
   std::shared_ptr<Document> doc_ptr() const { return doc_; }
 
+  // Linguagem em uso no realce. Redetectada quando o arquivo ganha um nome
+  // novo (arquivo novo salvo como "algo.c" passa a ter realce de C na hora).
+  Lang language() const { return hl_.lang(); }
+  void refresh_language();
+
   // ---- desenho -----------------------------------------------------------
   void draw(const Rect& area, bool focused);
   // Onde o cursor de verdade deve aparecer (calculado no ultimo draw).

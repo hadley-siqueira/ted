@@ -34,6 +34,13 @@ EditorView::EditorView(std::shared_ptr<Document> doc) : doc_(std::move(doc)) {
   hl_.set_lang(Highlighter::detect(doc_->path()));
 }
 
+void EditorView::refresh_language() {
+  Lang lang = Highlighter::detect(doc_->path());
+  if (lang == hl_.lang()) return;
+  hl_.set_lang(lang);
+  hl_states_.clear();   // o cache de estados valia para a linguagem anterior
+}
+
 // ---------------------------------------------------------------------------
 // Selecao
 // ---------------------------------------------------------------------------
