@@ -125,23 +125,91 @@ cores, sem precisar reconfigurá-lo. Em terminais de 8 cores o editor cai num
 esquema simples e legível. Para criar a sua, copie um bloco em `src/theme.cpp`,
 troque os valores e recompile — o nome novo já aparece em `--themes`.
 
-## Configuração (opcional)
+## Configuração
 
-Crie `~/.config/ted/ted.conf` com uma opção por linha (há um modelo completo em
-`ted.conf.exemplo`):
+Tudo é opcional: sem nenhum arquivo, o `ted` já abre com padrões pensados para
+quem está começando. A configuração serve para mudar esses padrões.
+
+### Onde fica o arquivo
+
+Um único arquivo, procurado nesta ordem:
+
+1. `$XDG_CONFIG_HOME/ted/ted.conf` — se a variável estiver definida;
+2. `~/.config/ted/ted.conf` — o caso normal.
+
+Ele **não é criado sozinho**: se não existir, o editor simplesmente usa os
+padrões. Não há arquivo de configuração por projeto nem um arquivo global do
+sistema — é um por usuário, e só.
+
+Para começar a partir do modelo que vem no repositório:
+
+```sh
+mkdir -p ~/.config/ted
+cp ted.conf.exemplo ~/.config/ted/ted.conf
+```
+
+O `ted.conf.exemplo` já traz todas as opções com um comentário explicando cada
+uma, e a lista completa de paletas comentada para você descomentar a que
+quiser.
+
+### Formato
+
+Uma opção por linha, `chave = valor`. Os espaços em volta são ignorados, `#`
+começa um comentário (em qualquer ponto da linha) e linhas sem `=` são
+ignoradas:
 
 ```ini
-theme = rose-pine      # paleta de cores (ted --themes lista as opções)
-tab_width = 4          # largura do TAB
-use_spaces = true      # TAB insere espaços
-auto_indent = true     # mantém a indentação no Enter
-auto_close = true      # fecha (), [], {}, "" e '' sozinho
-line_numbers = true
-mouse = true
-sidebar_width = 26
-terminal_height = 10
-show_terminal = true
-show_sidebar = true
+theme = rose-pine      # isto aqui é comentário
+tab_width = 2
+```
+
+Chaves que o editor não conhece são ignoradas em silêncio — inclusive quando
+você erra o nome. Se uma opção não fez efeito, confira a grafia na tabela
+abaixo.
+
+### Opções
+
+| Chave | Valores | Padrão | O que faz |
+|---|---|---|---|
+| `theme` | nome de paleta | `default` | cores do editor — veja [Cores](#cores) |
+| `tab_width` | 1 a 16 | `4` | de quantas colunas é um nível de indentação |
+| `use_spaces` | `true`/`false` | `true` | `Tab` insere espaços em vez do caractere TAB |
+| `auto_indent` | `true`/`false` | `true` | `Enter` mantém a indentação da linha atual |
+| `auto_close` | `true`/`false` | `true` | fecha `()`, `[]`, `{}`, `""` e `''` sozinho |
+| `line_numbers` | `true`/`false` | `true` | mostra a coluna com os números de linha |
+| `mouse` | `true`/`false` | `true` | clique, arrasto e roda do mouse dentro do editor |
+| `sidebar_width` | ≥ 10 | `26` | largura inicial da barra de arquivos |
+| `terminal_height` | ≥ 3 | `10` | altura inicial do terminal embutido |
+| `show_sidebar` | `true`/`false` | `true` | começa com a barra de arquivos visível |
+| `show_terminal` | `true`/`false` | `true` | começa com o terminal embutido visível |
+
+Valem como verdadeiro: `true`, `1`, `sim` e `yes`. **Qualquer outra coisa é
+lida como falso**, então um `tru` mal digitado desliga a opção sem avisar.
+
+Números fora da faixa voltam ao padrão (`tab_width`) ou são presos no mínimo
+(`sidebar_width`, `terminal_height`). Um nome de paleta que não existe faz o
+editor abrir com a paleta padrão e avisar na barra de status.
+
+### Quando vale o quê
+
+- O arquivo é lido **uma vez, ao abrir o editor**. Editar o `ted.conf` com o
+  próprio `ted` funciona, mas o efeito só aparece na próxima vez que você abrir.
+- `ted --theme NOME` tem prioridade sobre o `theme` do arquivo — bom para
+  experimentar sem editar nada.
+- O que você muda com o teclado durante o uso (`Ctrl+B`, `Ctrl+J`, `F9`,
+  `Alt+setas`) vale só para aquela sessão; para tornar permanente, escreva a
+  opção equivalente no `ted.conf`.
+
+### Para uma turma inteira
+
+Não existe configuração de sistema, então a forma direta é cada aluno copiar o
+modelo (as duas linhas de `cp` acima) no primeiro dia. Se as máquinas forem
+compartilhadas ou você quiser uma configuração igual para todos sem mexer no
+`$HOME` de cada um, aponte `XDG_CONFIG_HOME` para uma pasta comum no script que
+abre o editor:
+
+```sh
+XDG_CONFIG_HOME=/opt/aula/config ted    # lê /opt/aula/config/ted/ted.conf
 ```
 
 ## Como o código está organizado
