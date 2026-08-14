@@ -46,6 +46,7 @@ std::string lang_name(Lang l) {
     case Lang::Json: return "JSON";
     case Lang::Html: return "HTML";
     case Lang::Css: return "CSS";
+    case Lang::Sql: return "SQL";
     default: return "Texto";
   }
 }

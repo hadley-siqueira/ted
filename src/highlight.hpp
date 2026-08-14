@@ -9,7 +9,7 @@
 #include <vector>
 
 enum class Lang {
-  None, C, Cpp, Python, JavaScript, Shell, Make, Markdown, Json, Html, Css
+  None, C, Cpp, Python, JavaScript, Shell, Make, Markdown, Json, Html, Css, Sql
 };
 
 class Highlighter {

@@ -223,7 +223,7 @@ Cada arquivo cuida de uma coisa só — dá para ler um por vez com a turma:
 | `src/editorview.*` | o painel de código: cursor, seleção, rolagem, desenho |
 | `src/filetree.*` | a barra lateral de pastas e arquivos |
 | `src/terminal.*` | o terminal embutido: PTY + emulador VT100/xterm |
-| `src/highlight.*` | realce de sintaxe (C, C++, Python, JS/JSX, HTML, CSS, Shell, Markdown) |
+| `src/highlight.*` | realce de sintaxe (C, C++, Python, JS/JSX, HTML, CSS, SQL, Shell, Markdown) |
 | `src/ui.*` | ncurses: cores, teclas com modificadores, mouse |
 | `src/app.*` | layout dos painéis, loop de eventos e atalhos |
 | `src/theme.*` | paletas de cores e conversão RGB → 256 cores |

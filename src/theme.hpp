@@ -60,7 +60,11 @@ inline int luminance(Color rgb) {
   return (r * 30 + g * 59 + b * 11) / 100;
 }
 
+// Mistura duas cores ('percent' e quanto de 'b' entra em 'a').
+Color blend(Color a, Color b, int percent);
+
 // Duas cores parecidas podem cair no mesmo indice da paleta de 256 - e ai o
-// fundo da barra lateral some dentro do fundo do editor. Esta funcao empurra
-// um indice uma casa para o lado claro ou escuro para manter a diferenca.
-int nudge_256(int index, bool lighter);
+// fundo da barra lateral some dentro do fundo do editor. Esta funcao devolve o
+// indice de 'want' garantindo que seja diferente de 'avoid': se coincidir, vai
+// aproximando 'want' de 'toward' (o que preserva o tom da cor) ate mudar.
+int shade_apart(Color want, Color toward, int avoid);

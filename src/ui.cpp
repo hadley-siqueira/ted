@@ -104,14 +104,13 @@ void apply_theme(const Theme& t) {
   // do editor e o da barra lateral diferem em 6 pontos de brilho). Depois de
   // reduzir para 256 cores eles podem virar o mesmo indice, e a divisao entre
   // os paineis desapareceria - por isso o empurrao abaixo.
-  auto distinct = [&](Color want) {
-    int idx = c(want);
-    if (bg >= 0 && idx == bg)
-      idx = nudge_256(idx, luminance(want) >= luminance(t.bg));
-    return idx;
-  };
-  const int bg_alt = distinct(t.bg_alt);
-  const int bg_sel = distinct(t.bg_sel);
+  const int bg_alt = shade_apart(t.bg_alt, t.fg, bg);
+  const int bg_sel = shade_apart(t.bg_sel, t.fg, bg);
+
+  // Na maioria das paletas o comentario e o texto apagado sao a mesma cor.
+  // Como os numeros de linha aparecem em toda linha, eles vao um pouco na
+  // direcao do fundo para ficarem mais discretos que os comentarios.
+  const int lineno = shade_apart(t.fg_dim, t.bg, c(t.comment));
 
   pair(kNormal, fg, bg);
   pair(kStatus, accent_fg, accent);
@@ -123,7 +122,7 @@ void apply_theme(const Theme& t) {
   pair(kTabBar, dim, bg_alt);
   pair(kTabActive, accent_fg, accent);
   pair(kTabModified, c(t.modified), bg_alt);
-  pair(kLineNo, dim, bg);
+  pair(kLineNo, lineno, bg);
   pair(kLineNoCur, fg, bg);
   pair(kSelection, fg, bg_sel);
   pair(kSearchHit, c(t.search_fg), c(t.search_bg));

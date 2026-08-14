@@ -14,7 +14,7 @@ const Theme kThemes[] = {
     // -------------------------------------------------------------------
     {"default",
      /* bg */ kDefaultColor, /* fg */ kDefaultColor,
-     /* bg_alt */ 0x1c1c1c, /* bg_sel */ 0x5f5f87, /* fg_dim */ 0x808080,
+     /* bg_alt */ 0x1c1c1c, /* bg_sel */ 0x5f5f87, /* fg_dim */ 0x6c6c6c,
      /* accent */ 0x005f87, /* accent_fg */ 0xffffff, /* accent2 */ 0x87afff,
      /* keyword */ 0xff5faf, /* type */ 0x5fd7d7, /* string */ 0xafd787,
      /* comment */ 0x808080, /* number */ 0xffaf87, /* preproc */ 0xd7af5f,
@@ -144,24 +144,24 @@ int rgb_to_256(int r, int g, int b) {
   return (gray_d < cube_d) ? gray : cube;
 }
 
-int nudge_256(int index, bool lighter) {
-  const int step = lighter ? 1 : -1;
-  if (index >= 232 && index <= 255) {          // rampa de cinzas
-    int n = index + step;
-    if (n < 232) return 16;                    // abaixo do cinza mais escuro
-    if (n > 255) return 231;                   // acima do mais claro
-    return n;
+Color blend(Color a, Color b, int percent) {
+  if (a == kDefaultColor || b == kDefaultColor) return a;
+  if (percent < 0) percent = 0;
+  if (percent > 100) percent = 100;
+  auto mix = [&](int shift) {
+    int ca = (a >> shift) & 0xFF, cb = (b >> shift) & 0xFF;
+    return (ca * (100 - percent) + cb * percent) / 100;
+  };
+  return (mix(16) << 16) | (mix(8) << 8) | mix(0);
+}
+
+int shade_apart(Color want, Color toward, int avoid) {
+  int idx = rgb_to_256(want);
+  if (idx != avoid || toward == kDefaultColor || want == kDefaultColor)
+    return idx;
+  for (int percent = 15; percent <= 60; percent += 15) {
+    int candidate = rgb_to_256(blend(want, toward, percent));
+    if (candidate != avoid) return candidate;
   }
-  if (index >= 16 && index <= 231) {           // cubo 6x6x6
-    int x = index - 16;
-    int r = x / 36, g = (x % 36) / 6, b = x % 6;
-    auto move = [&](int v) {
-      int n = v + step;
-      return n < 0 ? 0 : (n > 5 ? 5 : n);
-    };
-    int nr = move(r), ng = move(g), nb = move(b);
-    int out = 16 + 36 * nr + 6 * ng + nb;
-    return out == index ? index : out;
-  }
-  return index;
+  return idx;
 }

@@ -108,6 +108,23 @@ const std::set<std::string>& keywords_for(Lang lang) {
       "case", "do", "done", "elif", "else", "esac", "fi", "for", "function",
       "if", "in", "local", "return", "then", "until", "while", "export",
       "echo", "read", "source"};
+  // SQL nao diferencia maiusculas de minusculas: guardamos tudo em minusculo
+  // e a palavra lida do texto e convertida antes da busca.
+  static const std::set<std::string> sql_kw = {
+      "add", "all", "alter", "analyze", "and", "any", "as", "asc", "begin",
+      "between", "by", "cascade", "case", "cast", "check", "column", "commit",
+      "constraint", "create", "cross", "database", "declare", "default",
+      "delete", "desc", "describe", "distinct", "drop", "else", "end",
+      "except", "execute", "exists", "explain", "false", "foreign", "from",
+      "full", "grant", "group", "having", "if", "ilike", "in", "index",
+      "inner", "insert", "intersect", "into", "is", "join", "key", "left",
+      "like", "limit", "not", "null", "offset", "on", "or", "order", "outer",
+      "over", "partition", "primary", "procedure", "recursive", "references",
+      "rename", "replace", "restrict", "return", "returning", "revoke",
+      "right", "rollback", "schema", "select", "set", "show", "some", "table",
+      "temporary", "then", "to", "transaction", "trigger", "true", "truncate",
+      "union", "unique", "update", "use", "using", "values", "view", "when",
+      "where", "window", "with"};
   static const std::set<std::string> none;
 
   switch (lang) {
@@ -117,6 +134,7 @@ const std::set<std::string>& keywords_for(Lang lang) {
     case Lang::JavaScript: return js_kw;
     case Lang::Shell:
     case Lang::Make: return sh_kw;
+    case Lang::Sql: return sql_kw;
     default: return none;
   }
 }
@@ -144,8 +162,21 @@ const std::set<std::string>& types_for(Lang lang) {
       "useState", "useEffect", "useRef", "useMemo", "useCallback",
       "useContext", "useReducer", "useLayoutEffect", "useId", "memo",
       "createContext", "createRoot", "props", "children"};
+  // Tipos de coluna e as funcoes mais comuns (tudo em minusculo, como acima).
+  static const std::set<std::string> sql_types = {
+      "array", "bigint", "bigserial", "binary", "bit", "blob", "bool",
+      "boolean", "char", "clob", "date", "datetime", "decimal", "double",
+      "enum", "float", "int", "integer", "interval", "json", "jsonb", "money",
+      "nchar", "numeric", "nvarchar", "precision", "real", "serial",
+      "smallint", "text", "time", "timestamp", "tinyint", "uuid", "varbinary",
+      "varchar", "year",
+      "abs", "avg", "coalesce", "concat", "count", "current_date",
+      "current_timestamp", "date_trunc", "extract", "greatest", "least",
+      "length", "lower", "max", "min", "now", "nullif", "round", "row_number",
+      "substring", "sum", "trim", "upper"};
   static const std::set<std::string> none;
   switch (lang) {
+    case Lang::Sql: return sql_types;
     case Lang::C: return c_types;
     case Lang::Cpp: return cpp_types;
     case Lang::Python: return py_types;
@@ -195,6 +226,8 @@ Lang Highlighter::detect(const std::string& path) {
       e == "vue" || e == "svelte")
     return Lang::Html;
   if (e == "css" || e == "scss" || e == "sass" || e == "less") return Lang::Css;
+  if (e == "sql" || e == "psql" || e == "pgsql" || e == "mysql" || e == "ddl")
+    return Lang::Sql;
   if (e == "sh" || e == "bash" || e == "zsh" || e == ".bashrc") return Lang::Shell;
   if (e == "Makefile" || e == "makefile" || e == "mk") return Lang::Make;
   if (e == "md" || e == "markdown") return Lang::Markdown;
@@ -256,8 +289,11 @@ int Highlighter::scan_code(const std::string& line, size_t from, size_t to,
   const bool c_like =
       lang == Lang::C || lang == Lang::Cpp || lang == Lang::JavaScript;
   const bool jsx = (lang == Lang::JavaScript);
+  const bool sql = (lang == Lang::Sql);
   const bool hash_comment =
       lang == Lang::Python || lang == Lang::Shell || lang == Lang::Make;
+  const bool block_comment = c_like || sql;   // /* ... */
+  const bool ci_words = sql;                  // SELECT e select sao a mesma coisa
 
   int state = main_state(state_in);
   size_t i = from;
@@ -315,8 +351,12 @@ int Highlighter::scan_code(const std::string& line, size_t from, size_t to,
     const char c = line[i];
 
     // Comentarios.
-    if (c_like && c == '/' && i + 1 < to) {
-      if (line[i + 1] == '/') {
+    if (sql && c == '-' && i + 1 < to && line[i + 1] == '-') {
+      paint(out, i, to, ui::kSynComment);
+      return kNormal;
+    }
+    if (block_comment && c == '/' && i + 1 < to) {
+      if (c_like && line[i + 1] == '/') {
         paint(out, i, to, ui::kSynComment);
         return kNormal;
       }
@@ -363,6 +403,41 @@ int Highlighter::scan_code(const std::string& line, size_t from, size_t to,
       }
       paint(out, i, j + 1, ui::kSynString);
       i = j + 1;
+      continue;
+    }
+
+    // No SQL as aspas se invertem: 'texto' e uma string, "coluna" (ou
+    // `coluna`, no MySQL) e o nome de uma tabela ou coluna. E a aspa simples
+    // se escapa dobrando: 'nao e' vira 'nao e''.
+    if (sql && (c == '"' || c == '`')) {
+      size_t j = i + 1;
+      while (j < to && line[j] != c) j++;
+      j = std::min(j + 1, to);
+      paint(out, i, j, ui::kSynType);
+      i = j;
+      continue;
+    }
+    if (sql && c == '\'') {
+      size_t j = i + 1;
+      while (j < to) {
+        if (line[j] == '\'') {
+          if (j + 1 < to && line[j + 1] == '\'') { j += 2; continue; }
+          j++;
+          break;
+        }
+        j++;
+      }
+      paint(out, i, std::min(j, to), ui::kSynString);
+      i = j;
+      continue;
+    }
+    // Parametros: :nome, @variavel, $1.
+    if (sql && (c == ':' || c == '@' || c == '$') && i + 1 < to &&
+        (ident_char(line[i + 1]))) {
+      size_t j = i + 1;
+      while (j < to && ident_char(line[j])) j++;
+      paint(out, i, j, ui::kSynPreproc);
+      i = j;
       continue;
     }
 
@@ -420,6 +495,7 @@ int Highlighter::scan_code(const std::string& line, size_t from, size_t to,
       size_t j = i;
       while (j < to && ident_char(line[j])) j++;
       std::string word = line.substr(i, j - i);
+      if (ci_words) word = lower(word);
       if (kw.count(word)) paint(out, i, j, ui::kSynKeyword);
       else if (types.count(word)) paint(out, i, j, ui::kSynType);
       i = j;
