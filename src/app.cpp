@@ -784,6 +784,26 @@ void App::close_terminal() {
   needs_redraw_ = true;
 }
 
+// Um shell que terminou (exit ou Ctrl+D) some da barra sozinho. O ultimo
+// terminal e a excecao: ele fica com o aviso "encerrado - Enter reinicia",
+// senao o painel ficaria vazio e sem como voltar.
+void App::reap_terminals() {
+  bool mudou = false;
+  for (size_t i = terms_.size(); i-- > 0;) {
+    if (terms_.size() <= 1) break;
+    if (terms_[i]->running()) continue;
+    terms_.erase(terms_.begin() + static_cast<long>(i));
+    // Quem estava depois do removido andou uma casa para tras; se o removido
+    // era o proprio terminal em foco, o foco vai para o vizinho anterior.
+    if (cur_term_ >= static_cast<int>(i)) cur_term_--;
+    mudou = true;
+  }
+  if (!mudou) return;
+  cur_term_ = std::min(std::max(cur_term_, 0),
+                       static_cast<int>(terms_.size()) - 1);
+  needs_redraw_ = true;
+}
+
 void App::next_terminal(int delta) {
   if (terms_.size() < 2) return;
   const int n = static_cast<int>(terms_.size());
@@ -804,18 +824,24 @@ void App::draw_terminal_tabs(const std::string& right) {
     return;
   }
 
-  attrset(COLOR_PAIR(foco ? ui::kPaneTitleActive : ui::kPaneTitle) | A_BOLD);
+  // Mesmo esquema das abas do editor: o fundo da barra e sempre kTabBar, e quem
+  // diz se o painel esta em foco e o *destaque da aba ativa* (kTabActive com
+  // foco, kTabActiveDim sem).
+  //
+  // Nao volte a pintar o fundo com kPaneTitleActive: ele e o mesmo par de cor
+  // que kTabActive (accent_fg sobre accent, veja ui.cpp), entao com o foco no
+  // terminal a aba ativa sumia dentro da barra.
+  attrset(COLOR_PAIR(ui::kTabBar));
   ui::fill(r.y, r.x, r.w);
   int x = r.x + 1;
   for (size_t i = 0; i < terms_.size(); i++) {
-    const std::string label = " " + std::to_string(i + 1) +
-                              (terms_[i]->running() ? "" : "!") + " ";
+    const std::string label = " " + std::to_string(i + 1) + " ";
     const int w = utf8::width(label, 4);
     if (x + w > r.x + r.w) break;
     const bool act = (static_cast<int>(i) == cur_term_);
     attrset(COLOR_PAIR(act ? (foco ? ui::kTabActive : ui::kTabActiveDim)
-                           : (foco ? ui::kPaneTitleActive : ui::kPaneTitle)) |
-            A_BOLD);
+                           : ui::kTabBar) |
+            (act ? A_BOLD : 0));
     ui::fill(r.y, x, w);
     ui::put(r.y, x, w, label);
     x += w;
@@ -824,7 +850,7 @@ void App::draw_terminal_tabs(const std::string& right) {
     const int w = utf8::width(right, 4);
     const int rx = r.x + r.w - w - 1;
     if (rx > x + 1) {
-      attrset(COLOR_PAIR(foco ? ui::kPaneTitleActive : ui::kPaneTitle));
+      attrset(COLOR_PAIR(ui::kTabBar));
       ui::put(r.y, rx, w, right);
     }
   }
@@ -1739,6 +1765,7 @@ int App::run() {
       if (terms_[i]->poll_output() && static_cast<int>(i) == cur_term_)
         needs_redraw_ = true;
     }
+    reap_terminals();
 
     if (needs_redraw_) {
       draw();

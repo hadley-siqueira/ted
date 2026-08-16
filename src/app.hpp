@@ -119,6 +119,7 @@ class App {
   void new_terminal();
   void close_terminal();
   void next_terminal(int delta);
+  void reap_terminals();   // tira da barra os shells que ja encerraram
 
   void message(const std::string& msg, bool error = false);
   void set_focus(Focus f);

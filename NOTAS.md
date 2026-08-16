@@ -110,6 +110,8 @@ Cada uma dessas linhas existe porque um bug real aconteceu:
 | `Ctrl+W` perguntava "salvar alterações?" mesmo com o arquivo aberto em outro painel | não contava quantas views mostram o documento | `views_of_doc()` em `app.cpp` |
 | "Salvar como" `.txt`→`.c` só trocava o realce no painel que salvou | `refresh_language()` só na view ativa | `refresh_language_of()` em `app.cpp` |
 | Painel estreito escondia a aba ativa (mostrava a aba 0 e `>`) | `draw_tabbar()` desenhava sempre a partir da primeira aba | `draw_tabbar()` rola até a ativa, com `<`/`>` |
+| Com o foco no terminal, a aba de terminal ativa ficava igual às outras | `kTabActive` e `kPaneTitleActive` são **o mesmo par** (`accent_fg`/`accent`): a aba ativa sumia dentro do fundo da barra | `draw_terminal_tabs()` em `app.cpp` |
+| Shell encerrado (`exit`/`Ctrl+D`) continuava na barra de terminais | ninguém removia o `Terminal` parado da lista | `reap_terminals()` em `app.cpp` |
 
 ---
 
@@ -512,6 +514,21 @@ está em outro terminal e ninguém ler o pty, o buffer enche e **o processo
 trava**. Redesenhar, esse sim, só quando o terminal visível muda.
 
 Teto: 6 terminais.
+
+**Ciclo de vida**: `reap_terminals()` roda a cada volta do laço, logo depois da
+leitura da saída, e tira da lista todo shell que encerrou. O **último**
+terminal é a exceção — ele fica com o aviso "encerrado - Enter reinicia", senão
+o painel ficaria vazio e sem como voltar. Por isso a barra de abas nunca
+mostra um terminal morto, e o marcador `!` que existia no rótulo foi removido:
+era inalcançável.
+
+**Cuidado com as cores**: `kTabActive` e `kPaneTitleActive` são o mesmo par
+(`accent_fg` sobre `accent`, veja `ui.cpp`). A barra de terminais usa o esquema
+das abas do editor — fundo fixo `kTabBar`, e quem sinaliza o foco do painel é o
+*destaque da aba ativa* (`kTabActive` com foco, `kTabActiveDim` sem). Pintar o
+fundo da barra com `kPaneTitleActive` faz a aba ativa desaparecer dentro dele.
+Os três estados resultantes, conferidos na tela: foco+ativa = fundo accent
+(`48;5;24`); sem foco+ativa = texto accent (`38;5;24`); inativas = `48;5;234`.
 
 **Medido**: um terminal escondido despejando ~200 KB drenou e terminou em ~1 s,
 e um servidor Node rodando escondido respondeu a um `curl` feito de outro
