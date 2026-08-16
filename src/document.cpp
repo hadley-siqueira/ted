@@ -8,9 +8,18 @@
 #include <fstream>
 #include <sstream>
 
+#include "config.hpp"
+
 namespace {
-constexpr size_t kMaxUndo = 500;
 constexpr auto kCoalesceWindow = std::chrono::milliseconds(600);
+
+// Quanto um snapshot custa de verdade: o vetor de linhas mais o conteudo de
+// cada uma. Usamos capacity() porque e o que o alocador realmente reservou.
+size_t snapshot_bytes(const std::vector<std::string>& lines) {
+  size_t n = lines.capacity() * sizeof(std::string);
+  for (const std::string& l : lines) n += l.capacity();
+  return n;
+}
 }  // namespace
 
 Document::Document() { lines_.push_back(std::string()); }
@@ -72,6 +81,8 @@ bool Document::load(const std::string& path, std::string* error) {
   modified_ = false;
   undo_stack_.clear();
   redo_stack_.clear();
+  undo_bytes_ = 0;   // os contadores andam junto com as pilhas, sempre
+  redo_bytes_ = 0;
   version_++;
   return true;
 }
@@ -140,10 +151,45 @@ void Document::touch() {
 }
 
 void Document::push_undo(Pos cursor) {
-  undo_stack_.push_back(Snapshot{lines_, cursor, modified_});
-  if (undo_stack_.size() > kMaxUndo)
-    undo_stack_.erase(undo_stack_.begin());
+  Snapshot s{lines_, cursor, modified_, 0};
+  s.bytes = snapshot_bytes(s.lines);
+  undo_bytes_ += s.bytes;
+  undo_stack_.push_back(std::move(s));
+
   redo_stack_.clear();
+  redo_bytes_ = 0;
+  trim_undo();
+}
+
+// Dois tetos, os dois do ted.conf, e vale o que estourar primeiro:
+//
+//   undo_levels     quantos passos da para voltar (o que o aluno enxerga);
+//   undo_memory_mb  quanta RAM as duas pilhas podem ocupar.
+//
+// O de memoria existe porque cada nivel guarda uma copia do arquivo inteiro:
+// 500 niveis de um package-lock.json de 20 mil linhas passam de 700 MB num
+// processo so (veja a secao 10 do NOTAS.md). Sempre sobra pelo menos um nivel,
+// senao o Ctrl+Z deixaria de funcionar justamente nos arquivos grandes.
+void Document::trim_undo() {
+  const size_t max_niveis = static_cast<size_t>(g_config.undo_levels);
+  while (undo_stack_.size() > max_niveis) {
+    undo_bytes_ -= undo_stack_.front().bytes;
+    undo_stack_.erase(undo_stack_.begin());
+  }
+
+  const size_t max_bytes =
+      static_cast<size_t>(g_config.undo_memory_mb) * 1024u * 1024u;
+
+  // O refazer e o primeiro a ser sacrificado: perder o que ja foi desfeito
+  // incomoda menos do que perder o historico do que ainda esta na tela.
+  while (!redo_stack_.empty() && undo_bytes_ + redo_bytes_ > max_bytes) {
+    redo_bytes_ -= redo_stack_.front().bytes;
+    redo_stack_.erase(redo_stack_.begin());
+  }
+  while (undo_stack_.size() > 1 && undo_bytes_ + redo_bytes_ > max_bytes) {
+    undo_bytes_ -= undo_stack_.front().bytes;
+    undo_stack_.erase(undo_stack_.begin());
+  }
 }
 
 void Document::begin_edit(EditKind kind, Pos cursor) {
@@ -217,8 +263,15 @@ std::string Document::erase(Pos a, Pos b) {
 bool Document::undo(Pos* cursor) {
   if (undo_stack_.empty()) return false;
   Snapshot s = undo_stack_.back();
+  undo_bytes_ -= s.bytes;
   undo_stack_.pop_back();
-  redo_stack_.push_back(Snapshot{lines_, cursor ? *cursor : Pos{}, modified_});
+
+  Snapshot atual{lines_, cursor ? *cursor : Pos{}, modified_, 0};
+  atual.bytes = snapshot_bytes(atual.lines);
+  redo_bytes_ += atual.bytes;
+  redo_stack_.push_back(std::move(atual));
+  trim_undo();
+
   lines_ = s.lines;
   modified_ = s.modified;
   if (cursor) *cursor = clamp(s.cursor);
@@ -230,8 +283,15 @@ bool Document::undo(Pos* cursor) {
 bool Document::redo(Pos* cursor) {
   if (redo_stack_.empty()) return false;
   Snapshot s = redo_stack_.back();
+  redo_bytes_ -= s.bytes;
   redo_stack_.pop_back();
-  undo_stack_.push_back(Snapshot{lines_, cursor ? *cursor : Pos{}, modified_});
+
+  Snapshot atual{lines_, cursor ? *cursor : Pos{}, modified_, 0};
+  atual.bytes = snapshot_bytes(atual.lines);
+  undo_bytes_ += atual.bytes;
+  undo_stack_.push_back(std::move(atual));
+  trim_undo();
+
   lines_ = s.lines;
   modified_ = s.modified;
   if (cursor) *cursor = clamp(s.cursor);

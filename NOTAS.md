@@ -657,3 +657,98 @@ tudo, inclusive métodos, e destacar tudo viraria ruído.
 (`{- -}`), `kMlComment` (`(* *)`), `kCsVerbatim` (`@"..."` do C#, onde a aspa
 se escapa dobrando) e `kErbTag`. Comentário aninhado de Haskell e OCaml **não**
 é tratado: `{- {- -} -}` fecha no primeiro `-}`.
+
+---
+
+## 10. Teste de carga: 40 alunos num VPS de 8 GB
+
+Cenário simulado: 40 instâncias simultâneas, cada uma com 10 arquivos de um
+projeto web abertos, edições e 100 operações de desfazer/refazer. Medido com
+**PSS** (`/proc/PID/smaps_rollup`), não RSS: o RSS conta o binário e a
+`ncursesw` uma vez por processo e superestima em ~3×.
+
+### 10.1 Resultado do cenário pedido
+
+| Métrica | 1 aluno | 40 alunos |
+|---|---|---|
+| `ted` RSS | 7 MB | 291 MB |
+| `ted` **PSS** | 3 MB | **91 MB** |
+| shells do terminal embutido (PSS) | 4 MB | 172 MB |
+| **total real** | ~7 MB | **~263 MB** |
+
+**Cabe com folga enorme**: 263 MB de 8 GB, ~3%. As 40 continuaram vivas e
+respondendo (`F1` testado), todas com 7 MB de RSS, distribuição uniforme.
+
+A memória subiu de 43 para 91 MB durante as edições e ficou **plana** durante
+os 100 desfazer/refazer — desfazer não aloca, só move snapshot entre as pilhas.
+
+**CPU ocioso**: 40 instâncias paradas consomem **8,6% de um núcleo** (0,22%
+cada), do laço que acorda a cada 20 ms (`timeout(20)`). A §6 diz "ocioso → 0%
+de CPU", o que vale para uma instância arredondando; com 40 o custo agregado
+aparece.
+
+### 10.2 O teto do desfazer é o risco real
+
+O desfazer guarda **uma cópia do vetor de linhas por grupo de edição** (§1),
+com teto de 500 níveis (`kMaxUndo`). O custo por snapshot é ~2,1× o tamanho do
+arquivo, então o teto de memória por documento é ~1.000× o arquivo:
+
+| Arquivo | Snapshot | Teto (500 níveis) |
+|---|---|---|
+| `.jsx` de aula (241 linhas, 12 KB) | ~25 KB | ~25 MB |
+| `package-lock.json` (20.005 linhas, 740 KB) | ~1,5 MB | **778 MB** |
+
+Medições (confirmadas na máquina, não extrapoladas):
+
+| Cenário | Por aluno | × 40 |
+|---|---|---|
+| Pedido (10 arquivos, 100 undo/redo) | 2,3 MB | **263 MB** ✔ |
+| Pesado (10 arquivos, 500 grupos de edição em cada) | **211 MB** | **8,4 GB** ✘ |
+| Um `package-lock.json` muito editado | **778 MB** | 31 GB ✘ |
+
+O teto **segura** (700 edições dão a mesma memória que 500 — não é vazamento),
+mas ele é alto demais. E 500 grupos de edição por arquivo numa aula longa é
+plausível: a digitação abre um grupo novo a cada 600 ms de pausa.
+
+### 10.3 Correção — FEITA
+
+**Dois tetos, os dois inteiros e configuráveis no `ted.conf`**, valendo o que
+estourar primeiro (`Document::trim_undo()`):
+
+| Opção | Padrão | O que limita |
+|---|---|---|
+| `undo_levels` | 500 | quantos passos o `Ctrl+Z` volta — o conceito que o aluno enxerga |
+| `undo_memory_mb` | 8 | RAM das duas pilhas (undo + redo) por arquivo — a rede de segurança |
+
+O de memória é o que resolve o problema do VPS: o de níveis sozinho não serve,
+porque o custo de um nível depende do tamanho do arquivo (25 KB num `.jsx` de
+aula, 1,5 MB num `package-lock.json`).
+
+**Detalhes que não podem se perder:**
+
+- Cada `Snapshot` guarda o próprio custo em `bytes`, medido na criação, e
+  `undo_bytes_`/`redo_bytes_` mantêm as somas. Sem isso, aparar a pilha seria
+  O(histórico) a cada tecla.
+- **`load()` limpa as pilhas e tem que zerar os contadores junto.** Esquecer
+  isso deixa o teto disparando cedo demais no arquivo seguinte.
+- **Sempre sobra pelo menos um nível de desfazer**, mesmo que ele estoure o
+  teto sozinho — senão o `Ctrl+Z` deixaria de funcionar justamente nos arquivos
+  grandes, que é onde ele mais importa.
+- A pilha de **refazer é sacrificada primeiro**: perder o que já foi desfeito
+  incomoda menos que perder o histórico do que ainda está na tela.
+
+**Efeito medido** (mesmos cenários da §10.2, agora com o teto):
+
+| Cenário | Antes | Depois | × 40 alunos |
+|---|---|---|---|
+| Pedido (10 arquivos, 100 undo/redo) | 2,3 MB | 2,3 MB | 263 MB ✔ |
+| Pesado (10 arquivos, 500 grupos em cada) | 211 MB | **96 MB** | **3,8 GB** ✔ |
+| `package-lock.json` muito editado | 778 MB | **16 MB** | 640 MB ✔ |
+
+O `undo_memory_mb` escala linear e previsível: 1 → 10 MB, 8 → 16 MB, 64 → 80 MB,
+1024 → 466 MB no mesmo teste. Para apertar mais num VPS, `undo_memory_mb = 4`
+leva o pior caso a ~50 MB por aluno.
+
+O limite de 16 MB por arquivo (`kMaxFileSize`) deixou de ser enganoso: um
+arquivo de 16 MB muito editado agora custa 16 MB de arquivo + 8 MB de desfazer,
+e não os ~16 GB de antes.

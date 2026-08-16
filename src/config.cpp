@@ -51,12 +51,18 @@ void load_config() {
     else if (key == "auto_close") g_config.auto_close = as_bool();
     else if (key == "show_bracket_match") g_config.show_bracket_match = as_bool();
     else if (key == "mouse") g_config.mouse = as_bool();
+    else if (key == "undo_levels") g_config.undo_levels = as_int();
+    else if (key == "undo_memory_mb") g_config.undo_memory_mb = as_int();
     else if (key == "sidebar_width") g_config.sidebar_width = as_int();
     else if (key == "terminal_height") g_config.terminal_height = as_int();
     else if (key == "show_terminal") g_config.show_terminal = as_bool();
     else if (key == "show_sidebar") g_config.show_sidebar = as_bool();
   }
   if (g_config.tab_width < 1 || g_config.tab_width > 16) g_config.tab_width = 4;
+  if (g_config.undo_levels < 1) g_config.undo_levels = 1;
+  if (g_config.undo_levels > 10000) g_config.undo_levels = 10000;
+  if (g_config.undo_memory_mb < 1) g_config.undo_memory_mb = 1;
+  if (g_config.undo_memory_mb > 1024) g_config.undo_memory_mb = 1024;
   if (g_config.sidebar_width < 10) g_config.sidebar_width = 10;
   if (g_config.terminal_height < 3) g_config.terminal_height = 3;
 }

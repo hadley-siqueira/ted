@@ -317,6 +317,8 @@ abaixo.
 | `use_spaces` | `true`/`false` | `true` | `Tab` insere espaços em vez do caractere TAB |
 | `auto_indent` | `true`/`false` | `true` | `Enter` mantém a indentação da linha atual |
 | `auto_close` | `true`/`false` | `true` | fecha `()`, `[]`, `{}`, aspas e tags sozinho |
+| `undo_levels` | 1 a 10000 | `500` | quantos passos o `Ctrl+Z` consegue voltar |
+| `undo_memory_mb` | 1 a 1024 | `8` | RAM máxima do desfazer+refazer, por arquivo |
 | `show_bracket_match` | `true`/`false` | `true` | destaca o par de `()`, `[]`, `{}` sob o cursor |
 | `line_numbers` | `true`/`false` | `true` | mostra a coluna com os números de linha |
 | `mouse` | `true`/`false` | `true` | clique, arrasto e roda do mouse dentro do editor |
@@ -387,8 +389,10 @@ embutido é um emulador VT de verdade (`terminal.cpp`), que lê os bytes do
   fundo (um painel largo em cima e dois embaixo, por exemplo, não é possível).
   O tamanho é sempre repartido em partes iguais — não dá para arrastar a divisa.
 - Abre arquivos de texto de até 16 MB. O desfazer guarda uma cópia do arquivo a
-  cada grupo de edição, então arquivos muito maiores consumiriam a memória da
-  máquina; arquivos binários também são recusados, com aviso.
+  cada grupo de edição — por isso existe o teto `undo_memory_mb` (8 MB por
+  arquivo, por padrão): passando dele, os passos mais antigos são descartados
+  em silêncio, e o `Ctrl+Z` alcança menos longe num arquivo grande. Arquivos
+  binários são recusados, com aviso.
 - O realce de sintaxe é por expressões simples, não um parser de verdade. Em
   particular: no JSX, `<` só vira tag quando aparece onde um valor pode
   começar (para não colorir `a < b`); no CSS uma declaração que se espalhe

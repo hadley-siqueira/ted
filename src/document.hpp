@@ -79,9 +79,12 @@ class Document {
     std::vector<std::string> lines;
     Pos cursor;
     bool modified;
+    size_t bytes = 0;   // custo aproximado deste snapshot, medido ao criar
   };
 
   void push_undo(Pos cursor);
+  // Descarta os snapshots mais antigos ate caber nos dois tetos do ted.conf.
+  void trim_undo();
   void touch();
 
   std::vector<std::string> lines_;
@@ -93,6 +96,10 @@ class Document {
 
   std::vector<Snapshot> undo_stack_;
   std::vector<Snapshot> redo_stack_;
+  // Soma de 'bytes' de cada pilha, mantida na mao para o teto de memoria nao
+  // ter que percorrer os snapshots a cada edicao.
+  size_t undo_bytes_ = 0;
+  size_t redo_bytes_ = 0;
   EditKind last_kind_ = EditKind::Other;
   std::chrono::steady_clock::time_point last_edit_time_{};
 };

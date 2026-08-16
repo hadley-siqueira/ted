@@ -25,6 +25,14 @@ use_spaces = true      # TAB insere espacos (recomendado para a turma)
 auto_indent = true     # mantem a indentacao ao apertar Enter
 auto_close = true      # fecha (), [], {}, aspas e tags JSX/HTML automaticamente
 show_bracket_match = true   # destaca o par de (), [], {} sob o cursor
+
+# Tetos do desfazer/refazer. Valem os dois; corta o que estourar primeiro.
+# Cada nivel guarda uma copia do arquivo inteiro, entao o teto de memoria e o
+# que segura arquivos grandes: sem ele, 500 niveis de um package-lock.json de
+# 20 mil linhas passam de 700 MB. Num servidor com varios alunos, baixar
+# undo_memory_mb e a forma direta de limitar o consumo total.
+undo_levels = 500       # quantos passos da para voltar (1 a 10000)
+undo_memory_mb = 8      # RAM maxima das duas pilhas, por arquivo (1 a 1024)
 line_numbers = true    # mostra os numeros das linhas
 mouse = true           # clique, arrasto e roda do mouse
 
