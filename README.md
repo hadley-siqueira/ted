@@ -104,15 +104,56 @@ padrão) — mais previsível para quem está começando. Duas exceções e um e
 | Tecla | O que faz |
 |---|---|
 | `F2` / `F3` / `F4` | focar arquivos / editor / terminal |
-| `F6` | alternar entre os painéis |
+| `F6` | alternar entre as três regiões |
+| `Alt+V` | dividir a tela: painel novo **ao lado** |
+| `Alt+H` | dividir a tela: painel novo **embaixo** |
+| `Alt+W` | fechar o painel |
+| `F7` | alternar entre os painéis divididos |
 | `Ctrl+B` | mostrar/esconder a barra de arquivos |
 | `Ctrl+J` | mostrar/esconder o terminal |
-| `Alt+setas` | redimensionar os painéis |
+| `Alt+setas` | redimensionar a barra de arquivos e o terminal |
 | `F5` | recarregar a lista de arquivos |
 | `F9` | ligar/desligar o mouse |
 
 Na barra de arquivos: `↑↓` navega, `→`/`Enter` abre a pasta ou o arquivo,
 `←` fecha a pasta, `.` mostra/esconde arquivos ocultos.
+
+### Dividir a tela
+
+`Alt+V` põe **o mesmo arquivo** em dois painéis lado a lado; `Alt+H` põe um
+embaixo do outro. Não são duas cópias: é o mesmo texto visto duas vezes, com
+cursor e rolagem independentes. O que você digita em um aparece na hora no
+outro, e o `Ctrl+Z` de um desfaz a edição feita no outro — serve para comparar
+o começo e o fim de um arquivo comprido, ou para olhar a declaração enquanto
+escreve a chamada.
+
+Os dois se combinam: `Alt+V` e depois `Alt+H` deixam um painel à esquerda e
+dois empilhados à direita.
+
+```
+┌─────────┬─────────┐
+│         │    B    │
+│    A    ├─────────┤
+│         │    C    │
+└─────────┴─────────┘
+```
+
+Cada painel tem a **própria barra de abas** e a própria lista de arquivos
+abertos. `Ctrl+P`, `Ctrl+O` e `Ctrl+N` abrem sempre no painel onde você está,
+então dá para deixar `main.c` de um lado e o `.h` do outro. Clicar em um painel
+(ou `F7`) leva o foco para ele; a aba ativa do painel em foco fica com o fundo
+colorido, a dos outros só com a letra colorida.
+
+`Alt+W` fecha o painel, e fechar a **última aba** de um painel (`Ctrl+W`) fecha
+o painel junto. Se alguma aba tiver alteração não salva que não esteja aberta
+em outro painel, o editor **recusa** e avisa — salve com `Ctrl+S` ou feche a
+aba antes. Nada é jogado fora sem aviso.
+
+Painéis precisam de espaço: no mínimo 24 colunas de largura e 4 linhas de
+altura cada. Se não couber, o editor avisa em vez de dividir — `Ctrl+B` esconde
+a barra de arquivos (ajuda na horizontal) e `Ctrl+J` esconde o terminal (ajuda
+na vertical). Numa tela de 80×24 com o terminal aberto cabem três painéis
+empilhados; sem o terminal, cinco.
 
 ### Achar arquivos e trechos rapidamente
 
@@ -280,6 +321,10 @@ embutido é um emulador VT de verdade (`terminal.cpp`), que lê os bytes do
 ## Limitações conhecidas
 
 - Um cursor só (sem multi-cursor) e sem quebra automática de linha longa.
+- A divisão de painéis é uma grade de colunas: dá para ter várias colunas e
+  vários painéis empilhados dentro de cada uma, mas não dá para aninhar mais
+  fundo (um painel largo em cima e dois embaixo, por exemplo, não é possível).
+  O tamanho é sempre repartido em partes iguais — não dá para arrastar a divisa.
 - Abre arquivos de texto de até 16 MB. O desfazer guarda uma cópia do arquivo a
   cada grupo de edição, então arquivos muito maiores consumiriam a memória da
   máquina; arquivos binários também são recusados, com aviso.

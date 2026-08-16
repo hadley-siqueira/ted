@@ -830,8 +830,22 @@ bool EditorView::cursor_screen(int* x, int* y) const {
   return true;
 }
 
+// O mesmo Document pode estar aberto em mais de um painel (divisao da tela).
+// Quando *outro* painel edita o texto, o cursor, a ancora da selecao e a
+// rolagem deste aqui podem ter ficado apontando alem do fim do arquivo - sem
+// isso o painel aparece em branco e a barra de status mostra uma linha que nao
+// existe mais. Prender tudo a faixa valida antes de desenhar resolve; para o
+// painel que fez a edicao a operacao nao muda nada.
+void EditorView::sync_to_doc() {
+  cursor_ = doc_->clamp(cursor_);
+  sel_anchor_ = doc_->clamp(sel_anchor_);
+  const int max_row = std::max(0, doc_->line_count() - 1);
+  scroll_row_ = std::max(0, std::min(scroll_row_, max_row));
+}
+
 void EditorView::draw(const Rect& area, bool focused) {
   area_ = area;
+  sync_to_doc();
   ensure_visible();
   update_highlight_states();
   cursor_x_ = cursor_y_ = -1;

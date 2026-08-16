@@ -19,7 +19,8 @@ struct PickerItem {
 
   // Carga util: quem abriu o picker sabe o que faz com isso.
   std::string path;              // arquivo a abrir
-  int tab = -1;                  // aba onde esta o resultado
+  int pane = -1;                 // painel onde esta o resultado (ordem de leitura)
+  int tab = -1;                  // aba, dentro desse painel
   int line = 0;                  // linha (0-based)
   size_t col = 0, len = 0;       // trecho a selecionar
 };

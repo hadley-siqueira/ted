@@ -30,6 +30,12 @@ std::string expand_path(const std::string& p, const std::string& root) {
 // memoria da maquina e daria a impressao de travamento.
 constexpr long kMaxFileSize = 16L * 1024 * 1024;
 
+// Tamanho minimo de um painel dividido. Abaixo disso o split e recusado: e
+// melhor avisar que nao cabe do que dividir e desenhar torto. A altura conta a
+// barra de abas do painel (1) mais tres linhas de codigo.
+constexpr int kMinPaneW = 24;
+constexpr int kMinPaneH = 4;
+
 long file_size(const std::string& path) {
   struct stat st;
   if (stat(path.c_str(), &st) != 0) return -1;
@@ -88,8 +94,11 @@ std::string lang_name(Lang l) {
 
 App::App(const std::string& root, const std::vector<std::string>& files)
     : tree_(root) {
+  cols_.push_back(PaneColumn{});
+  cols_[0].rows.push_back(Pane{});
+
   for (const auto& f : files) open_file(expand_path(f, tree_.root()));
-  if (tabs_.empty()) new_tab();
+  if (pane().tabs.empty()) new_tab();
   if (!message_error_) {   // nao apaga um aviso vindo de open_file()
     message_ = "F1 mostra a ajuda com todos os atalhos.";
     message_ttl_ = 400;
@@ -102,12 +111,208 @@ App::App(const std::string& root, const std::vector<std::string>& files)
   }
 }
 
-EditorView* App::active() {
-  if (tabs_.empty()) return nullptr;
-  if (active_tab_ < 0) active_tab_ = 0;
-  if (active_tab_ >= static_cast<int>(tabs_.size()))
-    active_tab_ = static_cast<int>(tabs_.size()) - 1;
-  return tabs_[active_tab_].get();
+// ---------------------------------------------------------------------------
+// Paineis
+// ---------------------------------------------------------------------------
+
+// Os tres acessores abaixo prendem os indices a faixa valida em vez de confiar
+// em quem chamou: e a mesma rede que o antigo active() ja tinha, agora tambem
+// para a coluna e a linha da grade.
+Pane& App::pane() {
+  if (cols_.empty()) cols_.push_back(PaneColumn{});
+  cur_col_ = std::min(std::max(cur_col_, 0), static_cast<int>(cols_.size()) - 1);
+  PaneColumn& col = cols_[cur_col_];
+  if (col.rows.empty()) col.rows.push_back(Pane{});
+  cur_row_ = std::min(std::max(cur_row_, 0), static_cast<int>(col.rows.size()) - 1);
+  return col.rows[cur_row_];
+}
+
+EditorView* App::view_of(Pane& p) {
+  if (p.tabs.empty()) return nullptr;
+  p.active_tab =
+      std::min(std::max(p.active_tab, 0), static_cast<int>(p.tabs.size()) - 1);
+  return p.tabs[p.active_tab].get();
+}
+
+EditorView* App::active() { return view_of(pane()); }
+
+int App::pane_count() const {
+  int n = 0;
+  for (const auto& c : cols_) n += static_cast<int>(c.rows.size());
+  return n;
+}
+
+// Quantas views, em toda a grade, mostram este documento. Depois de um Alt+V
+// sao duas; fechar uma delas nao perde nada.
+int App::views_of_doc(const Document* d) const {
+  int n = 0;
+  for (const auto& col : cols_)
+    for (const auto& p : col.rows)
+      for (const auto& t : p.tabs)
+        if (&t->doc() == d) n++;
+  return n;
+}
+
+// "Salvar como" pode mudar a extensao do arquivo. Todas as views daquele
+// documento precisam redetectar a linguagem do realce, nao so a que salvou.
+void App::refresh_language_of(const Document* d) {
+  for (auto& col : cols_)
+    for (auto& p : col.rows)
+      for (auto& t : p.tabs)
+        if (&t->doc() == d) t->refresh_language();
+}
+
+bool App::doc_open_elsewhere(const Document* d, int col, int row) const {
+  for (size_t ci = 0; ci < cols_.size(); ci++) {
+    for (size_t ri = 0; ri < cols_[ci].rows.size(); ri++) {
+      if (static_cast<int>(ci) == col && static_cast<int>(ri) == row) continue;
+      for (const auto& t : cols_[ci].rows[ri].tabs)
+        if (&t->doc() == d) return true;
+    }
+  }
+  return false;
+}
+
+// Uma coluna nova a direita da atual, mostrando o *mesmo* documento numa view
+// nova - e por isso que EditorView guarda um shared_ptr<Document>: as duas
+// metades editam o mesmo texto, com cursor e rolagem independentes.
+void App::split_vertical() {
+  const int ncols = static_cast<int>(cols_.size());
+  // Estimativa de "cabe?": com pesos iguais (o caso normal) e exatamente a
+  // largura que cada coluna teria depois da divisao, ja descontados os
+  // separadores.
+  if ((editor_region_.w - ncols) / (ncols + 1) < kMinPaneW) {
+    message("Sem espaco para dividir. Ctrl+B esconde os arquivos.", true);
+    return;
+  }
+
+  EditorView* v = active();
+  Pane novo;
+  novo.tabs.push_back(v ? std::make_unique<EditorView>(v->doc_ptr())
+                        : std::make_unique<EditorView>(std::make_shared<Document>()));
+
+  PaneColumn col;
+  // Mesmo peso da coluna atual: as duas ficam do mesmo tamanho.
+  col.weight = cols_[cur_col_].weight;
+  col.rows.push_back(std::move(novo));
+  cols_.insert(cols_.begin() + cur_col_ + 1, std::move(col));
+
+  cur_col_++;
+  cur_row_ = 0;
+  set_focus(Focus::Editor);
+  compute_layout();
+  needs_redraw_ = true;
+}
+
+// Um painel novo embaixo do atual, dentro da mesma coluna. Aqui nao existe
+// linha de separador: a barra de abas do painel de baixo ja separa os dois.
+void App::split_horizontal() {
+  // active() passa por pane(), que e quem prende cur_col_/cur_row_ a faixa
+  // valida - so depois disso da para indexar cols_ com seguranca.
+  EditorView* v = active();
+  auto doc = v ? v->doc_ptr() : std::make_shared<Document>();
+
+  const int nrows = static_cast<int>(cols_[cur_col_].rows.size());
+  // Mesma conta da largura, agora na altura. Na horizontal o espaco e bem mais
+  // curto, por isso a dica sugere esconder o terminal e nao a barra lateral.
+  if (editor_region_.h / (nrows + 1) < kMinPaneH) {
+    message("Sem espaco para dividir. Ctrl+J esconde o terminal.", true);
+    return;
+  }
+
+  PaneColumn& col = cols_[cur_col_];
+  Pane novo;
+  novo.weight = col.rows[cur_row_].weight;   // as duas metades ficam iguais
+  novo.tabs.push_back(std::make_unique<EditorView>(doc));
+  col.rows.insert(col.rows.begin() + cur_row_ + 1, std::move(novo));
+
+  cur_row_++;
+  set_focus(Focus::Editor);
+  compute_layout();
+  needs_redraw_ = true;
+}
+
+// Tira o painel com o foco da grade, sem verificar nada: quem chama garante
+// que ha mais de um painel e que nada de nao salvo se perde.
+void App::remove_current_pane() {
+  PaneColumn& col = cols_[cur_col_];
+  col.rows.erase(col.rows.begin() + cur_row_);
+  if (col.rows.empty()) cols_.erase(cols_.begin() + cur_col_);
+  pane();                 // prende cur_col_/cur_row_ a faixa valida
+  compute_layout();
+  needs_redraw_ = true;
+}
+
+// Fechar um painel joga fora as abas dele. Se alguma tem alteracao nao salva
+// que nao esta aberta em nenhum outro painel, recusamos em vez de perguntar:
+// o aluno salva (Ctrl+S) ou fecha a aba (Ctrl+W) primeiro. Nunca perder texto.
+void App::close_pane() {
+  if (pane_count() <= 1) {
+    message("So ha um painel - nada para fechar (Ctrl+W fecha a aba).");
+    return;
+  }
+  const Pane& p = pane();
+  for (const auto& t : p.tabs) {
+    const Document* d = &t->doc();
+    if (!d->modified() || doc_open_elsewhere(d, cur_col_, cur_row_)) continue;
+    message("\"" + d->display_name() +
+                "\" tem alteracoes nao salvas. Salve (Ctrl+S) ou feche a aba "
+                "(Ctrl+W) antes de fechar o painel.",
+            true);
+    return;
+  }
+  remove_current_pane();
+  set_focus(Focus::Editor);
+}
+
+// Os paineis na ordem de leitura: coluna a coluna, de cima para baixo. A
+// posicao nesta lista e o "numero do painel" que o Ctrl+T guarda no PickerItem.
+std::vector<std::pair<int, int>> App::pane_order() const {
+  std::vector<std::pair<int, int>> order;
+  for (size_t ci = 0; ci < cols_.size(); ci++)
+    for (size_t ri = 0; ri < cols_[ci].rows.size(); ri++)
+      order.emplace_back(static_cast<int>(ci), static_cast<int>(ri));
+  return order;
+}
+
+// Leva o foco para o painel de numero 'idx' na ordem de leitura.
+bool App::focus_pane_index(int idx) {
+  const auto order = pane_order();
+  if (idx < 0 || idx >= static_cast<int>(order.size())) return false;
+  cur_col_ = order[idx].first;
+  cur_row_ = order[idx].second;
+  return true;
+}
+
+// Anda entre os paineis na ordem de leitura, dando a volta no fim.
+void App::next_pane(int delta) {
+  const auto order = pane_order();
+  if (order.size() < 2) {
+    message("So ha um painel (Alt+V ou Alt+H divide a tela).");
+    return;
+  }
+
+  int at = 0;
+  for (size_t i = 0; i < order.size(); i++)
+    if (order[i].first == cur_col_ && order[i].second == cur_row_)
+      at = static_cast<int>(i);
+  const int n = static_cast<int>(order.size());
+  focus_pane_index(((at + delta) % n + n) % n);
+  set_focus(Focus::Editor);
+  needs_redraw_ = true;
+}
+
+// Qual painel esta sob um ponto da tela (e se o ponto caiu na barra de abas).
+App::PaneRef App::pane_at(int x, int y) const {
+  for (size_t ci = 0; ci < cols_.size(); ci++) {
+    for (size_t ri = 0; ri < cols_[ci].rows.size(); ri++) {
+      const Pane& p = cols_[ci].rows[ri];
+      const int c = static_cast<int>(ci), r = static_cast<int>(ri);
+      if (p.tabbar.contains(x, y)) return PaneRef{c, r, true};
+      if (p.area.contains(x, y)) return PaneRef{c, r, false};
+    }
+  }
+  return PaneRef{};
 }
 
 // ---------------------------------------------------------------------------
@@ -131,7 +336,6 @@ void App::compute_layout() {
 
   int rx = sw;
   int rw = std::max(1, screen_w_ - sw);
-  tabbar_ = Rect{rx, 0, rw, 1};
 
   int th = 0;
   if (g_config.show_terminal) {
@@ -145,8 +349,48 @@ void App::compute_layout() {
     term_title_ = Rect{};
     term_rect_ = Rect{};
   }
-  int editor_h = body_h - 1 - (th > 0 ? th + 1 : 0);
-  editor_ = Rect{rx, 1, rw, std::max(1, editor_h)};
+  // O que sobra e a regiao da grade de paineis: cada painel gasta 1 linha com
+  // a propria barra de abas e fica com o resto para o codigo.
+  editor_region_ = Rect{rx, 0, rw, body_h - (th > 0 ? th + 1 : 0)};
+  layout_panes();
+}
+
+// Reparte a regiao do editor entre as colunas (por 'weight') e, dentro de cada
+// coluna, entre os paineis empilhados. A ultima coluna/linha leva a sobra da
+// divisao inteira, para nao deixar buraco na tela.
+void App::layout_panes() {
+  const int ncols = static_cast<int>(cols_.size());
+  if (ncols == 0) return;
+  const Rect& r = editor_region_;
+
+  // Uma coluna de separador entre colunas vizinhas (nenhuma se so ha uma).
+  const int avail_w = std::max(ncols, r.w - (ncols - 1));
+  int total_w = 0;
+  for (const auto& c : cols_) total_w += c.weight;
+  if (total_w <= 0) total_w = ncols;
+
+  int x = r.x;
+  for (int ci = 0; ci < ncols; ci++) {
+    PaneColumn& col = cols_[ci];
+    const int w = (ci == ncols - 1) ? (r.x + r.w - x)
+                                    : avail_w * col.weight / total_w;
+
+    const int nrows = static_cast<int>(col.rows.size());
+    int total_h = 0;
+    for (const auto& p : col.rows) total_h += p.weight;
+    if (total_h <= 0) total_h = std::max(1, nrows);
+
+    int y = r.y;
+    for (int ri = 0; ri < nrows; ri++) {
+      Pane& p = col.rows[ri];
+      const int h = (ri == nrows - 1) ? (r.y + r.h - y) : r.h * p.weight / total_h;
+      p.tabbar = Rect{x, y, w, 1};
+      p.area = Rect{x, y + 1, w, std::max(1, h - 1)};
+      y += h;
+    }
+    col.sep_x = (ci == ncols - 1) ? -1 : x + w;
+    x += w + 1;   // +1 = separador (irrelevante depois da ultima coluna)
+  }
 }
 
 void App::draw_pane_title(const Rect& r, const std::string& text, bool active_p,
@@ -166,27 +410,68 @@ void App::draw_pane_title(const Rect& r, const std::string& text, bool active_p,
   attrset(COLOR_PAIR(ui::kNormal));
 }
 
-void App::draw_tabbar() {
+// Rotulo de uma aba na barra: o nome do arquivo, com um ponto quando esta
+// modificado.
+static std::string tab_label(Document& d) {
+  return " " + d.display_name() + (d.modified() ? " •" : "") + " ";
+}
+
+// 'focused' diz se este e o painel que recebe as teclas. A aba ativa do painel
+// com o foco fica com o fundo de destaque; a dos outros so com a letra colorida
+// - da para ver que arquivo cada painel mostra sem disputar a atencao.
+void App::draw_tabbar(const Pane& p, bool focused) {
+  const Rect& bar = p.tabbar;
+  if (bar.w <= 0 || bar.h <= 0) return;
   attrset(COLOR_PAIR(ui::kTabBar));
-  ui::fill(tabbar_.y, tabbar_.x, tabbar_.w);
-  int x = tabbar_.x;
-  for (size_t i = 0; i < tabs_.size(); i++) {
-    Document& d = tabs_[i]->doc();
-    std::string label = " " + d.display_name() + (d.modified() ? " •" : "") + " ";
-    int w = utf8::width(label, 4);
-    if (x + w > tabbar_.x + tabbar_.w) {
-      attrset(COLOR_PAIR(ui::kTabBar));
-      ui::put(tabbar_.y, tabbar_.x + tabbar_.w - 1, 1, ">");
-      break;
-    }
-    bool act = (static_cast<int>(i) == active_tab_);
-    attrset(COLOR_PAIR(act ? ui::kTabActive
-                           : (d.modified() ? ui::kTabModified : ui::kTabBar)) |
-            (act ? A_BOLD : 0));
-    ui::fill(tabbar_.y, x, w);
-    ui::put(tabbar_.y, x, w, label);
-    x += w;
+  ui::fill(bar.y, bar.x, bar.w);
+  if (p.tabs.empty()) {
+    attrset(COLOR_PAIR(ui::kNormal));
+    return;
   }
+
+  const int n = static_cast<int>(p.tabs.size());
+  const int at = std::min(std::max(p.active_tab, 0), n - 1);
+
+  // A barra rola para a aba ativa: num painel estreito ela nao caberia se
+  // comecassemos sempre da primeira, e o painel ficaria mostrando um arquivo
+  // sem dizer qual e. Recua a partir da ativa enquanto couber.
+  int first = at;
+  int usado = utf8::width(tab_label(p.tabs[at]->doc()), 4);
+  while (first > 0) {
+    const int w = utf8::width(tab_label(p.tabs[first - 1]->doc()), 4);
+    if (usado + w > bar.w) break;
+    usado += w;
+    first--;
+  }
+
+  int x = bar.x;
+  int ultima = first - 1;
+  for (int i = first; i < n; i++) {
+    Document& d = p.tabs[i]->doc();
+    const std::string label = tab_label(d);
+    const int w = utf8::width(label, 4);
+    const int cabe = bar.x + bar.w - x;
+    if (cabe <= 0) break;
+    // A primeira desenhada aparece nem que seja cortada; as outras so inteiras.
+    if (w > cabe && i != first) break;
+    const int draw_w = std::min(w, cabe);
+
+    const bool act = (i == at);
+    int cp;
+    if (act) cp = focused ? ui::kTabActive : ui::kTabActiveDim;
+    else cp = d.modified() ? ui::kTabModified : ui::kTabBar;
+    attrset(COLOR_PAIR(cp) | (act ? A_BOLD : 0));
+    ui::fill(bar.y, x, draw_w);
+    ui::put(bar.y, x, draw_w, label);
+    x += draw_w;
+    ultima = i;
+    if (w > cabe) break;
+  }
+
+  // Setas avisando que ha abas fora da faixa visivel.
+  attrset(COLOR_PAIR(ui::kTabBar) | A_BOLD);
+  if (first > 0) ui::put(bar.y, bar.x, 1, "<");
+  if (ultima < n - 1) ui::put(bar.y, bar.x + bar.w - 1, 1, ">");
   attrset(COLOR_PAIR(ui::kNormal));
 }
 
@@ -276,11 +561,11 @@ void App::draw_help() {
       "",
       "BUSCA E NAVEGACAO                PAINEIS",
       "Ctrl+P  abrir arquivo pelo nome  F2/F3/F4  arquivos, editor, terminal",
-      "Ctrl+T  procurar nos abertos     F6  alterna entre os paineis",
-      "Ctrl+F  buscar no arquivo        Ctrl+B/Ctrl+J  esconde arquivos/terminal",
-      "F3 / Shift+F3  proxima / ant.    Alt+Setas  redimensiona os paineis",
-      "Ctrl+R  substituir tudo          F5 recarrega arquivos  F9 mouse on/off",
-      "Ctrl+G  ir para a linha          Shift+PgUp/PgDn  historico do terminal",
+      "Ctrl+T  procurar nos abertos     F6 alterna regioes  F7 painel dividido",
+      "Ctrl+F  buscar no arquivo        Alt+V/Alt+H divide  Alt+W fecha painel",
+      "F3 / Shift+F3  proxima / ant.    Ctrl+B/Ctrl+J esconde arquivos/terminal",
+      "Ctrl+R  substituir tudo          Alt+Setas redimensiona  F5 recarrega",
+      "Ctrl+G  ir para a linha          F9 mouse  Shift+PgUp/PgDn  historico",
       "Ctrl+Setas por palavra, Shift+Setas seleciona, Home/End, PgUp/PgDn",
       "",
       "No terminal tudo vai para o shell (inclusive Ctrl+C). F4/F6 saem de la.",
@@ -339,9 +624,23 @@ void App::draw() {
     attrset(COLOR_PAIR(ui::kNormal));
   }
 
-  // --- abas + editor ---
-  draw_tabbar();
-  if (EditorView* v = active()) v->draw(editor_, focus_ == Focus::Editor);
+  // --- abas + editor (um par por painel da grade) ---
+  for (int ci = 0; ci < static_cast<int>(cols_.size()); ci++) {
+    for (int ri = 0; ri < static_cast<int>(cols_[ci].rows.size()); ri++) {
+      Pane& p = cols_[ci].rows[ri];
+      const bool cur = (ci == cur_col_ && ri == cur_row_);
+      draw_tabbar(p, cur && focus_ == Focus::Editor);
+      if (EditorView* v = view_of(p))
+        v->draw(p.area, cur && focus_ == Focus::Editor);
+    }
+    // Separador entre esta coluna e a proxima, da barra de abas ate embaixo.
+    if (cols_[ci].sep_x >= 0) {
+      attrset(COLOR_PAIR(ui::kPaneTitle));
+      for (int y = editor_region_.y; y < editor_region_.y + editor_region_.h; y++)
+        mvaddstr(y, cols_[ci].sep_x, "│");
+      attrset(COLOR_PAIR(ui::kNormal));
+    }
+  }
 
   // --- terminal ---
   if (g_config.show_terminal && term_rect_.h > 0) {
@@ -536,19 +835,55 @@ bool App::prompt_key(const ui::KeyEvent& ev) {
 // ---------------------------------------------------------------------------
 
 void App::new_tab() {
-  tabs_.push_back(std::make_unique<EditorView>(std::make_shared<Document>()));
-  active_tab_ = static_cast<int>(tabs_.size()) - 1;
+  Pane& p = pane();
+  p.tabs.push_back(std::make_unique<EditorView>(std::make_shared<Document>()));
+  p.active_tab = static_cast<int>(p.tabs.size()) - 1;
   set_focus(Focus::Editor);
 }
 
+// Procura um arquivo ja aberto em *qualquer* painel e devolve o Document dele.
+// Serve para manter a invariante "um arquivo, um Document": se o mesmo arquivo
+// virasse dois buffers, editar nos dois e salvar faria o segundo Ctrl+S apagar
+// o trabalho do primeiro, sem aviso nenhum.
+std::shared_ptr<Document> App::find_open_doc(const std::string& path) const {
+  if (path.empty()) return nullptr;   // "sem nome" nao casa com "sem nome"
+  for (const auto& col : cols_)
+    for (const auto& pn : col.rows)
+      for (const auto& t : pn.tabs)
+        if (t->doc().path() == path) return t->doc_ptr();
+  return nullptr;
+}
+
+// Poe uma view do documento no painel: reaproveita a aba atual se ela estiver
+// vazia e sem nome, senao abre uma aba nova.
+void App::add_view(Pane& p, std::shared_ptr<Document> doc) {
+  EditorView* cur = view_of(p);
+  if (cur && !cur->doc().has_path() && !cur->doc().modified() &&
+      cur->doc().line_count() == 1 && cur->doc().line(0).empty()) {
+    p.tabs[p.active_tab] = std::make_unique<EditorView>(std::move(doc));
+  } else {
+    p.tabs.push_back(std::make_unique<EditorView>(std::move(doc)));
+    p.active_tab = static_cast<int>(p.tabs.size()) - 1;
+  }
+}
+
 void App::open_file(const std::string& path) {
-  // Ja esta aberto? So ativa a aba.
-  for (size_t i = 0; i < tabs_.size(); i++) {
-    if (tabs_[i]->doc().path() == path) {
-      active_tab_ = static_cast<int>(i);
+  Pane& p = pane();
+  // Ja esta aberto neste painel? So ativa a aba.
+  for (size_t i = 0; i < p.tabs.size(); i++) {
+    if (p.tabs[i]->doc().path() == path) {
+      p.active_tab = static_cast<int>(i);
       set_focus(Focus::Editor);
       return;
     }
+  }
+  // Aberto em *outro* painel? Mostra o mesmo Document aqui, como o Alt+V faz.
+  // Carregar o arquivo de novo criaria um segundo buffer do mesmo arquivo.
+  if (auto shared = find_open_doc(path)) {
+    add_view(p, std::move(shared));
+    set_focus(Focus::Editor);
+    needs_redraw_ = true;
+    return;
   }
   if (access(path.c_str(), F_OK) == 0) {
     const long size = file_size(path);
@@ -579,23 +914,38 @@ void App::open_file(const std::string& path) {
     message("Arquivo novo: " + path + " (Ctrl+S para criar)");
   }
 
-  // Se a aba atual esta vazia e sem nome, reaproveita.
-  EditorView* cur = active();
-  if (cur && !cur->doc().has_path() && !cur->doc().modified() &&
-      cur->doc().line_count() == 1 && cur->doc().line(0).empty()) {
-    tabs_[active_tab_] = std::make_unique<EditorView>(doc);
-  } else {
-    tabs_.push_back(std::make_unique<EditorView>(doc));
-    active_tab_ = static_cast<int>(tabs_.size()) - 1;
-  }
+  add_view(p, std::move(doc));
   set_focus(Focus::Editor);
+  needs_redraw_ = true;
+}
+
+// Tira a aba ativa do painel com o foco. Fechar a *ultima* aba de um painel
+// fecha o painel junto - do contrario a tela dividida ficaria com uma metade
+// mostrando "[sem nome]" em branco. Se o painel e o unico, ele continua vivo
+// com uma aba nova em branco (o editor nunca fica sem nenhum documento).
+void App::drop_active_tab() {
+  Pane& p = pane();
+  if (p.tabs.empty()) return;
+  p.tabs.erase(p.tabs.begin() + p.active_tab);
+
+  if (!p.tabs.empty()) {
+    if (p.active_tab >= static_cast<int>(p.tabs.size()))
+      p.active_tab = static_cast<int>(p.tabs.size()) - 1;
+    needs_redraw_ = true;
+    return;
+  }
+  if (pane_count() > 1) remove_current_pane();   // invalida 'p'
+  else new_tab();
   needs_redraw_ = true;
 }
 
 void App::close_tab() {
   EditorView* v = active();
   if (!v) return;
-  if (v->doc().modified()) {
+  // So pergunta se esta aba e a *unica* que mostra o documento. Com a tela
+  // dividida o mesmo arquivo costuma estar em dois paineis; ali fechar uma das
+  // abas nao perde nada, e perguntar "salvar alteracoes?" seria mentira.
+  if (v->doc().modified() && views_of_doc(&v->doc()) == 1) {
     std::string name = v->doc().display_name();
     ask_yes_no("Salvar alteracoes em " + name + "? (s/n/c)", [this](char a) {
       if (a == 'c') return;
@@ -605,39 +955,51 @@ void App::close_tab() {
         save(false);
         if (active() && active()->doc().modified()) return;
       }
-      tabs_.erase(tabs_.begin() + active_tab_);
-      if (tabs_.empty()) new_tab();
-      if (active_tab_ >= static_cast<int>(tabs_.size()))
-        active_tab_ = static_cast<int>(tabs_.size()) - 1;
-      needs_redraw_ = true;
+      drop_active_tab();
     });
     return;
   }
-  tabs_.erase(tabs_.begin() + active_tab_);
-  if (tabs_.empty()) new_tab();
-  if (active_tab_ >= static_cast<int>(tabs_.size()))
-    active_tab_ = static_cast<int>(tabs_.size()) - 1;
-  needs_redraw_ = true;
+  drop_active_tab();
 }
 
 void App::next_tab(int delta) {
-  if (tabs_.empty()) return;
-  int n = static_cast<int>(tabs_.size());
-  active_tab_ = ((active_tab_ + delta) % n + n) % n;
+  Pane& p = pane();
+  if (p.tabs.empty()) return;
+  int n = static_cast<int>(p.tabs.size());
+  p.active_tab = ((p.active_tab + delta) % n + n) % n;
   needs_redraw_ = true;
 }
 
 void App::do_save(const std::string& path) {
   EditorView* v = active();
   if (!v) return;
+
+  // "Salvar como" por cima de um arquivo que ja esta aberto em outra aba
+  // deixaria dois Documents com o mesmo caminho - e o proximo Ctrl+S de
+  // qualquer um dos dois apagaria o trabalho do outro, sem aviso. Recusamos,
+  // pela mesma razao do fechar painel. (Salvar por cima do proprio caminho,
+  // que e o Ctrl+S normal, continua passando.)
+  if (auto outro = find_open_doc(path)) {
+    if (outro.get() != &v->doc()) {
+      const size_t slash = path.find_last_of('/');
+      const std::string nome =
+          (slash == std::string::npos) ? path : path.substr(slash + 1);
+      message("\"" + nome +
+                  "\" ja esta aberto em outra aba. Feche-a antes (Ctrl+W).",
+              true);
+      return;
+    }
+  }
+
   std::string err;
   if (!v->doc().save_as(path, &err)) {
     message(err, true);
     return;
   }
   // O arquivo pode ter ganhado nome agora (ou outro nome): o realce de
-  // sintaxe precisa acompanhar a nova extensao.
-  v->refresh_language();
+  // sintaxe precisa acompanhar a nova extensao - em todos os paineis que
+  // mostram este documento, nao so neste.
+  refresh_language_of(&v->doc());
   message("Salvo: " + v->doc().display_name());
   tree_.refresh();
   tree_.reveal(path);
@@ -725,45 +1087,74 @@ std::vector<PickerItem> App::search_open_files(const std::string& query) {
   };
   const std::string needle = fold(query);
 
-  for (size_t t = 0; t < tabs_.size(); t++) {
-    Document& d = tabs_[t]->doc();
-    const std::string name = d.display_name();
-    for (int l = 0; l < d.line_count(); l++) {
-      const std::string& line = d.line(l);
-      size_t p = fold(line).find(needle);
-      if (p == std::string::npos) continue;
+  // Varre todos os paineis. Um mesmo Document costuma estar aberto em mais de
+  // um painel (foi isso que o Alt+V fez), e listar os resultados dele duas
+  // vezes seria so barulho: cada documento e procurado uma vez, e o resultado
+  // aponta para o primeiro painel que o mostra, na ordem de leitura.
+  std::vector<const Document*> ja_vistos;
+  const auto order = pane_order();
 
-      // Rotulo: "arquivo:linha  trecho da linha (sem a indentacao)".
-      std::string trecho = line;
-      size_t first = trecho.find_first_not_of(" \t");
-      size_t removed = (first == std::string::npos) ? 0 : first;
-      trecho = (first == std::string::npos) ? std::string() : trecho.substr(first);
+  for (size_t pi = 0; pi < order.size(); pi++) {
+    const Pane& pane_atual = cols_[order[pi].first].rows[order[pi].second];
+    for (size_t t = 0; t < pane_atual.tabs.size(); t++) {
+      Document& d = pane_atual.tabs[t]->doc();
+      if (std::find(ja_vistos.begin(), ja_vistos.end(), &d) != ja_vistos.end())
+        continue;
+      ja_vistos.push_back(&d);
 
-      const std::string prefix = name + ":" + std::to_string(l + 1) + "  ";
-      PickerItem item;
-      item.label = prefix + trecho;
-      for (size_t k = 0; k < needle.size(); k++)
-        item.match.push_back(prefix.size() + (p - removed) + k);
-      item.tab = static_cast<int>(t);
-      item.line = l;
-      item.col = p;
-      item.len = needle.size();
-      out.push_back(std::move(item));
-      if (out.size() >= kMaxSearchResults) return out;
+      const std::string name = d.display_name();
+      for (int l = 0; l < d.line_count(); l++) {
+        const std::string& line = d.line(l);
+        size_t hit = fold(line).find(needle);
+        if (hit == std::string::npos) continue;
+
+        // Rotulo: "arquivo:linha  trecho da linha (sem a indentacao)".
+        std::string trecho = line;
+        size_t first = trecho.find_first_not_of(" \t");
+        size_t removed = (first == std::string::npos) ? 0 : first;
+        trecho =
+            (first == std::string::npos) ? std::string() : trecho.substr(first);
+
+        const std::string prefix = name + ":" + std::to_string(l + 1) + "  ";
+        PickerItem item;
+        item.label = prefix + trecho;
+        for (size_t k = 0; k < needle.size(); k++)
+          item.match.push_back(prefix.size() + (hit - removed) + k);
+        item.pane = static_cast<int>(pi);
+        item.tab = static_cast<int>(t);
+        item.line = l;
+        item.col = hit;
+        item.len = needle.size();
+        out.push_back(std::move(item));
+        if (out.size() >= kMaxSearchResults) return out;
+      }
     }
   }
   return out;
 }
 
 void App::open_text_picker() {
-  std::string hint = "procurar em " + std::to_string(tabs_.size()) +
-                     (tabs_.size() == 1 ? " arquivo aberto" : " arquivos abertos");
+  // Conta documentos distintos, nao abas: o mesmo arquivo em dois paineis e
+  // um arquivo so (e a busca tambem o trata assim).
+  std::vector<const Document*> vistos;
+  for (const auto& col : cols_)
+    for (const auto& p : col.rows)
+      for (const auto& t : p.tabs)
+        if (std::find(vistos.begin(), vistos.end(), &t->doc()) == vistos.end())
+          vistos.push_back(&t->doc());
+
+  const size_t n = vistos.size();
+  std::string hint = "procurar em " + std::to_string(n) +
+                     (n == 1 ? " arquivo aberto" : " arquivos abertos");
   picker_.open("Procurar texto", hint,
                [this](const std::string& q) { return search_open_files(q); },
                [this](const PickerItem& item) {
-                 if (item.tab < 0 || item.tab >= static_cast<int>(tabs_.size()))
+                 if (!focus_pane_index(item.pane)) return;
+                 Pane& p = pane();
+                 if (item.tab < 0 ||
+                     item.tab >= static_cast<int>(p.tabs.size()))
                    return;
-                 active_tab_ = item.tab;
+                 p.active_tab = item.tab;
                  set_focus(Focus::Editor);
                  EditorView* v = active();
                  if (!v) return;
@@ -804,7 +1195,12 @@ void App::handle_mouse(const ui::KeyEvent& ev) {
     if (g_config.show_sidebar && sidebar_.contains(x, y)) tree_.scroll_by(dir);
     else if (g_config.show_terminal && term_rect_.contains(x, y))
       term_.scroll_view(dir);
-    else if (active()) active()->scroll_by(dir);
+    else {
+      // A roda age no painel sob o ponteiro; fora deles, no painel com o foco.
+      const PaneRef pr = pane_at(x, y);
+      Pane& p = pr.col >= 0 ? cols_[pr.col].rows[pr.row] : pane();
+      if (EditorView* v = view_of(p)) v->scroll_by(dir);
+    }
     return;
   }
 
@@ -833,13 +1229,17 @@ void App::handle_mouse(const ui::KeyEvent& ev) {
     if (tree_.click(x, y, &path) && !path.empty()) open_file(path);
     return;
   }
-  if (tabbar_.contains(x, y)) {
-    int tx = tabbar_.x;
-    for (size_t i = 0; i < tabs_.size(); i++) {
-      Document& d = tabs_[i]->doc();
-      int w = utf8::width(" " + d.display_name() + (d.modified() ? " •" : "") + " ", 4);
+
+  const PaneRef pr = pane_at(x, y);
+  if (pr.col >= 0 && pr.tabbar) {
+    Pane& p = cols_[pr.col].rows[pr.row];
+    int tx = p.tabbar.x;
+    for (size_t i = 0; i < p.tabs.size(); i++) {
+      int w = utf8::width(tab_label(p.tabs[i]->doc()), 4);
       if (x >= tx && x < tx + w) {
-        active_tab_ = static_cast<int>(i);
+        cur_col_ = pr.col;
+        cur_row_ = pr.row;
+        p.active_tab = static_cast<int>(i);
         set_focus(Focus::Editor);
         return;
       }
@@ -852,7 +1252,9 @@ void App::handle_mouse(const ui::KeyEvent& ev) {
     set_focus(Focus::Terminal);
     return;
   }
-  if (editor_.contains(x, y)) {
+  if (pr.col >= 0) {
+    cur_col_ = pr.col;
+    cur_row_ = pr.row;
     set_focus(Focus::Editor);
     if (EditorView* v = active()) {
       v->click(x, y, false);
@@ -893,6 +1295,7 @@ bool App::handle_global_key(const ui::KeyEvent& ev) {
         }
         return true;
       }
+      case KEY_F(7): next_pane(+1); return true;
       case KEY_F(9):
         g_config.mouse = !g_config.mouse;
         ui::set_mouse(g_config.mouse);
@@ -924,6 +1327,9 @@ bool App::handle_global_key(const ui::KeyEvent& ev) {
       case '2': set_focus(Focus::Editor); return true;
       case '3': set_focus(Focus::Terminal); return true;
       case 's': case 'S': save(true); return true;
+      case 'v': case 'V': split_vertical(); return true;
+      case 'h': case 'H': split_horizontal(); return true;
+      case 'w': case 'W': close_pane(); return true;
       default: break;
     }
   }
@@ -1078,8 +1484,10 @@ void App::handle_editor_key(const ui::KeyEvent& ev) {
 
 void App::quit_request() {
   bool dirty = false;
-  for (auto& t : tabs_)
-    if (t->doc().modified()) dirty = true;
+  for (auto& col : cols_)
+    for (auto& p : col.rows)
+      for (auto& t : p.tabs)
+        if (t->doc().modified()) dirty = true;
   if (!dirty) {
     quit_ = true;
     return;
@@ -1089,18 +1497,31 @@ void App::quit_request() {
                if (a == 'c') return;
                if (a == 'n') { quit_ = true; return; }
                bool all_ok = true;
-               for (size_t i = 0; i < tabs_.size(); i++) {
-                 if (!tabs_[i]->doc().modified()) continue;
-                 if (!tabs_[i]->doc().has_path()) {
-                   active_tab_ = static_cast<int>(i);
-                   save(true);
-                   all_ok = false;
-                   break;
-                 }
-                 std::string err;
-                 if (!tabs_[i]->doc().save(&err)) {
-                   message(err, true);
-                   all_ok = false;
+               // O primeiro arquivo *sem nome* interrompe a varredura: ele
+               // abre o "salvar como", e o Ctrl+Q seguinte continua daqui.
+               bool asked_name = false;
+               for (size_t ci = 0; ci < cols_.size() && !asked_name; ci++) {
+                 for (size_t ri = 0; ri < cols_[ci].rows.size() && !asked_name;
+                      ri++) {
+                   Pane& p = cols_[ci].rows[ri];
+                   for (size_t i = 0; i < p.tabs.size(); i++) {
+                     Document& d = p.tabs[i]->doc();
+                     if (!d.modified()) continue;
+                     if (!d.has_path()) {
+                       cur_col_ = static_cast<int>(ci);
+                       cur_row_ = static_cast<int>(ri);
+                       p.active_tab = static_cast<int>(i);
+                       save(true);
+                       all_ok = false;
+                       asked_name = true;
+                       break;
+                     }
+                     std::string err;
+                     if (!d.save(&err)) {
+                       message(err, true);
+                       all_ok = false;
+                     }
+                   }
                  }
                }
                if (all_ok) quit_ = true;

@@ -96,6 +96,7 @@ class EditorView {
   Pos sel_begin() const;
   Pos sel_end() const;
   void begin_move(bool extend);
+  void sync_to_doc();
   void update_highlight_states();
   std::string indent_of(const std::string& line) const;
 

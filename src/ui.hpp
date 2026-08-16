@@ -28,6 +28,7 @@ enum ColorPair {
   kSidebarSelInactive,
   kTabBar,
   kTabActive,
+  kTabActiveDim,   // aba ativa de um painel que NAO esta com o foco
   kTabModified,
   kLineNo,
   kLineNoCur,

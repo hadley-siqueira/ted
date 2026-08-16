@@ -70,6 +70,7 @@ void apply_basic_theme() {
   pair(kSidebarSelInactive, COLOR_WHITE, COLOR_BLACK);
   pair(kTabBar, COLOR_WHITE, COLOR_BLACK);
   pair(kTabActive, COLOR_WHITE, COLOR_BLUE);
+  pair(kTabActiveDim, COLOR_CYAN, COLOR_BLACK);
   pair(kTabModified, COLOR_YELLOW, COLOR_BLACK);
   pair(kLineNo, COLOR_BLUE, -1);
   pair(kLineNoCur, COLOR_WHITE, -1);
@@ -121,6 +122,10 @@ void apply_theme(const Theme& t) {
   pair(kSidebarSelInactive, fg, bg_sel);
   pair(kTabBar, dim, bg_alt);
   pair(kTabActive, accent_fg, accent);
+  // A aba ativa de um painel sem foco: a cor de destaque vira *letra*, em vez
+  // de fundo. Da para ver que arquivo cada painel mostra sem competir com o
+  // painel que esta com o foco.
+  pair(kTabActiveDim, accent, bg_alt);
   pair(kTabModified, c(t.modified), bg_alt);
   pair(kLineNo, lineno, bg);
   pair(kLineNoCur, fg, bg);
