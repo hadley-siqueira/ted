@@ -864,6 +864,23 @@ void App::draw_terminal_tabs(const std::string& right) {
   attrset(COLOR_PAIR(ui::kNormal));
 }
 
+// Qual aba do terminal esta embaixo de (x, y). Precisa andar pelos rotulos do
+// mesmo jeito que draw_terminal_tabs desenha - se um mudar, o outro tambem.
+int App::terminal_tab_at(int x, int y) const {
+  const Rect& r = term_title_;
+  if (r.w <= 0 || r.h <= 0 || terms_.size() <= 1) return -1;
+  if (!r.contains(x, y)) return -1;
+  int tx = r.x + 1;
+  for (size_t i = 0; i < terms_.size(); i++) {
+    const std::string label = " " + std::to_string(i + 1) + " ";
+    const int w = utf8::width(label, 4);
+    if (tx + w > r.x + r.w) break;
+    if (x >= tx && x < tx + w) return static_cast<int>(i);
+    tx += w;
+  }
+  return -1;
+}
+
 void App::ask(const std::string& label, const std::string& initial,
               PromptCb cb) {
   prompt_active_ = true;
@@ -1377,6 +1394,10 @@ void App::handle_mouse(const ui::KeyEvent& ev) {
   }
   if (g_config.show_terminal &&
       (term_rect_.contains(x, y) || term_title_.contains(x, y))) {
+    // Clicar numa aba numerada da barra de titulo troca de terminal, igual as
+    // abas dos arquivos abertos.
+    const int t = terminal_tab_at(x, y);
+    if (t >= 0) cur_term_ = t;
     set_focus(Focus::Terminal);
     return;
   }

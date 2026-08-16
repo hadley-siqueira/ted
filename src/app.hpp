@@ -116,6 +116,7 @@ class App {
   // --- terminais -----------------------------------------------------------
   Terminal* term();                   // o terminal visivel (nullptr se nenhum)
   void draw_terminal_tabs(const std::string& right);
+  int terminal_tab_at(int x, int y) const;   // -1 se nao caiu em nenhuma aba
   void new_terminal();
   void close_terminal();
   void next_terminal(int delta);
