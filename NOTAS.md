@@ -67,7 +67,10 @@ Cada uma dessas linhas existe porque um bug real aconteceu:
 1. **`highlight.cpp`: todo caractere aceito por `ident_start()` precisa ser
    aceito por `ident_char()`.** Senão a regra de identificador não consome nada
    e o scanner trava. Há uma rede no laço (`if (i == last_i) { i++; }`) — não a
-   remova.
+   remova. Pela mesma razão, os sufixos de nome adicionados por linguagem
+   (`empty?` e `save!` no Ruby, `foo'` em Haskell e OCaml) só ampliam o fim do
+   identificador, nunca o começo: `?`, `!` e `'` continuam fora de
+   `ident_start()`.
 2. **`terminal.cpp`: toda escrita na tela passa por `row_at(y)`**, que prende o
    índice ao intervalo válido. E todo ajuste de `cx_`/`cy_` precisa de piso 0,
    não só de teto.
@@ -148,10 +151,24 @@ sleep 1.5; T1=$(awk '{print $14+$15}' /proc/$PID/stat)
 ```
 
 **Fuzz do realce** (achou o bug do `$` e valida qualquer mudança em
-`highlight.cpp`): um `main()` que lê arquivos reais, roda `highlight()` linha a
-linha em **todas** as linguagens do enum e usa `alarm(5)` + `SIGALRM` para
-abortar em loop infinito. Rodar contra `src/*`, `Makefile`, `README.md` e o
-próprio binário cobre bem (~90 mil linhas em segundos).
+`highlight.cpp`): `tools_fuzz_hl.cpp` na raiz. Roda `highlight()` linha a linha
+em **todas** as linguagens do enum sobre arquivos reais, usa `alarm(5)` +
+`SIGALRM` para abortar em laço infinito, e ainda confere duas invariantes: o
+vetor de cores tem um elemento por byte, e o estado devolvido cabe nos 16 bits
+do empacotamento.
+
+```sh
+make
+g++ -std=c++17 -O2 -Isrc -o /tmp/fuzz_hl tools_fuzz_hl.cpp \
+    build/highlight.o build/config.o build/ui.o build/theme.o build/utf8.o \
+    $(pkg-config --libs ncursesw)
+/tmp/fuzz_hl src/*.cpp src/*.hpp Makefile README.md NOTAS.md
+```
+
+Última execução: 167 mil linhas (19 linguagens × 32 arquivos) sem nenhum
+travamento. **Rode sempre que mexer em `highlight.cpp`** — e com amostras da
+linguagem nova, porque os fontes do próprio projeto não exercitam sintaxe de
+Ruby, Haskell, OCaml, Verilog nem VHDL.
 
 Para crash, `gdb` em modo batch dentro do tmux funciona bem:
 `gdb -q -batch -ex 'set logging file /tmp/g.log' -ex 'set logging enabled on'
@@ -586,3 +603,57 @@ Vale mais em JS do que em C: uma cadeia de callbacks termina numa pilha de
   um `{` sem fechamento num arquivo de 60 mil linhas não pode varrer tudo a
   cada redesenho (medido: 1 tick de CPU ocioso nesse caso).
 - Opção `show_bracket_match` no `ted.conf`, ligada por padrão.
+
+---
+
+## 9. Realce: as oito linguagens acrescentadas
+
+Ruby, ERB, C#, Haskell, OCaml, Verilog e VHDL entraram de uma vez; **Bash já
+existia** como `Lang::Shell` (`.sh`/`.bash`/`.zsh`) e só ganhou reforço —
+`$VAR`, `${...}`, `$1` e mais palavras reservadas.
+
+Quase tudo reaproveita o `scan_code()`, que já era um scanner parametrizado por
+flags. O que **não** cabia nas flags existentes:
+
+### 9.1 O apóstrofo não é só aspa
+
+Em Haskell, OCaml, VHDL e Verilog o `'` tem outros usos, e tratá-lo como
+delimitador de string quebra o arquivo inteiro a partir dali:
+
+| Linguagem | Uso | Exemplo |
+|---|---|---|
+| Haskell / OCaml | parte do nome | `nome'`, `'a` (variável de tipo) |
+| VHDL | atributo | `clk'event`, `x'length` |
+| Verilog | base numérica | `8'hFF`, `4'b1010`, `'d0` |
+
+`is_char_literal()` resolve: nessas linguagens o `'` só abre caractere na forma
+curta `'x'` ou `'\n'`. O Verilog ainda tem uma regra própria antes, para a base
+numérica. Os dois casos estão nas amostras de teste — **se alguém "simplificar"
+isso, um arquivo `.hs` com `foo'` fica todo colorido de string.**
+
+### 9.2 ERB são duas passadas
+
+`scan_erb()` desenha o HTML da linha inteira e **depois** repinta por cima os
+trechos `<% %>` como Ruby. As duas passadas escrevem no mesmo vetor por índice,
+então a segunda vence. Sai muito mais simples do que interromper o scanner de
+HTML no meio.
+
+O estado normal é o do próprio HTML (16 bits, com o sub-estado de
+`<script>`/`<style>`). Só quando um `<%` fica aberto no fim da linha é que
+trocamos para `kErbTag`, guardando o estado *principal* do HTML nos bits de
+cima — nesse caso o sub-estado se perde, o que só importa para um `<%` aberto
+dentro de um `<script>`, que não acontece na prática.
+
+### 9.3 Maiúscula tem significado (em três delas)
+
+Em Ruby, Haskell e OCaml uma palavra que começa com maiúscula é constante,
+classe, tipo, construtor ou módulo — e é destacada como tipo mesmo sem estar em
+nenhuma lista. **Em C# essa regra não vale**: lá PascalCase é a convenção de
+tudo, inclusive métodos, e destacar tudo viraria ruído.
+
+### 9.4 Estados novos que atravessam linhas
+
+`kRubyComment` (`=begin`/`=end`, que precisam estar na coluna 0), `kHsComment`
+(`{- -}`), `kMlComment` (`(* *)`), `kCsVerbatim` (`@"..."` do C#, onde a aspa
+se escapa dobrando) e `kErbTag`. Comentário aninhado de Haskell e OCaml **não**
+é tratado: `{- {- -} -}` fecha no primeiro `-}`.

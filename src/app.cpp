@@ -86,6 +86,13 @@ std::string lang_name(Lang l) {
     case Lang::Html: return "HTML";
     case Lang::Css: return "CSS";
     case Lang::Sql: return "SQL";
+    case Lang::Ruby: return "Ruby";
+    case Lang::Erb: return "ERB";
+    case Lang::CSharp: return "C#";
+    case Lang::Haskell: return "Haskell";
+    case Lang::OCaml: return "OCaml";
+    case Lang::Verilog: return "Verilog";
+    case Lang::Vhdl: return "VHDL";
     default: return "Texto";
   }
 }

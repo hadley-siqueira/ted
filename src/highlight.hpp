@@ -9,7 +9,8 @@
 #include <vector>
 
 enum class Lang {
-  None, C, Cpp, Python, JavaScript, Shell, Make, Markdown, Json, Html, Css, Sql
+  None, C, Cpp, Python, JavaScript, Shell, Make, Markdown, Json, Html, Css, Sql,
+  Ruby, Erb, CSharp, Haskell, OCaml, Verilog, Vhdl
 };
 
 // Como se comenta em cada linguagem. 'line' vazio significa que a linguagem
@@ -60,6 +61,11 @@ class Highlighter {
     kHtmlStyle,         // conteudo de <style>: destacado como CSS
     kCssBlock,          // dentro das { } de uma regra CSS
     kCssBlockComment,   // /* ... */ dentro das { } de uma regra CSS
+    kRubyComment,       // =begin ... =end do Ruby
+    kHsComment,         // {- ... -} do Haskell
+    kMlComment,         // (* ... *) do OCaml
+    kCsVerbatim,        // @"..." do C#, que pode atravessar linhas
+    kErbTag,            // <% ... %> do ERB ainda sem fechar
   };
 
   // Preenche 'out' (uma cor por byte, 0 = cor normal) e devolve o estado
@@ -76,6 +82,9 @@ class Highlighter {
                std::vector<int>* out) const;
   int scan_html(const std::string& line, int state_in, std::vector<int>* out) const;
   int scan_markdown(const std::string& line, std::vector<int>* out) const;
+  // ERB: desenha o HTML e depois repinta por cima os trechos <% ... %> como
+  // Ruby. O estado guarda o do HTML nos bits de cima.
+  int scan_erb(const std::string& line, int state_in, std::vector<int>* out) const;
 
   // Pinta atributos (nome=valor) ate encontrar '>' ou '/>'. Em JSX tambem
   // para em '{', devolvendo o controle para o scanner de JavaScript.

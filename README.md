@@ -229,6 +229,43 @@ cores, sem precisar reconfigurá-lo. Em terminais de 8 cores o editor cai num
 esquema simples e legível. Para criar a sua, copie um bloco em `src/theme.cpp`,
 troque os valores e recompile — o nome novo já aparece em `--themes`.
 
+## Linguagens com realce
+
+O realce sai pela extensão do arquivo, sem configuração:
+
+| Linguagem | Extensões |
+|---|---|
+| C / C++ | `.c` `.h` / `.cpp` `.cc` `.cxx` `.hpp` `.hh` `.hxx` `.ino` |
+| C# | `.cs` `.csx` |
+| Python | `.py` `.pyw` |
+| JavaScript / TypeScript | `.js` `.mjs` `.cjs` `.ts` `.jsx` `.tsx` |
+| Ruby | `.rb` `.rake` `.gemspec` `.ru` |
+| ERB | `.erb` `.rhtml` |
+| Haskell | `.hs` `.lhs` |
+| OCaml | `.ml` `.mli` `.mll` `.mly` |
+| Verilog / SystemVerilog | `.v` `.sv` `.svh` `.vh` |
+| VHDL | `.vhd` `.vhdl` |
+| Shell / Bash | `.sh` `.bash` `.zsh` `.ksh` `.bashrc` `.zshrc` |
+| HTML / XML | `.html` `.htm` `.xhtml` `.xml` `.svg` `.vue` `.svelte` |
+| CSS | `.css` `.scss` `.sass` `.less` |
+| SQL | `.sql` `.psql` `.pgsql` `.mysql` `.ddl` |
+| Make | `Makefile` `.mk` |
+| Markdown | `.md` `.markdown` |
+| JSON | `.json` |
+
+Alguns detalhes que valem saber:
+
+- **ERB** desenha o HTML e pinta o Ruby dentro de `<% %>`, `<%= %>` e `<%# %>`,
+  inclusive quando a tag atravessa linhas.
+- **Ruby** entende `=begin`/`=end`, símbolos (`:nome`), variáveis de instância
+  (`@x`), de classe (`@@x`) e globais (`$x`), e métodos terminados em `?` ou `!`.
+- **C#** entende `#region`, strings literais `@"..."` (que podem atravessar
+  linhas) e interpoladas `$"..."`.
+- **Verilog** entende diretivas com crase (`` `define ``) e bases numéricas
+  (`8'hFF`, `4'b1010`, `'d0`).
+- **VHDL** e **SQL** não diferenciam maiúsculas de minúsculas.
+- **Bash** destaca `$VAR`, `${...}` e `$1`.
+
 ## Configuração
 
 Tudo é opcional: sem nenhum arquivo, o `ted` já abre com padrões pensados para
@@ -330,7 +367,7 @@ Cada arquivo cuida de uma coisa só — dá para ler um por vez com a turma:
 | `src/picker.*` | a caixa flutuante de busca com lista (Ctrl+P e Ctrl+T) |
 | `src/fuzzy.*` | o casamento e a pontuação da busca por nome |
 | `src/terminal.*` | o terminal embutido: PTY + emulador VT100/xterm |
-| `src/highlight.*` | realce de sintaxe (C, C++, Python, JS/JSX, HTML, CSS, SQL, Shell, Markdown) |
+| `src/highlight.*` | realce de sintaxe (19 linguagens, veja abaixo) |
 | `src/ui.*` | ncurses: cores, teclas com modificadores, mouse |
 | `src/app.*` | layout dos painéis, loop de eventos e atalhos |
 | `src/theme.*` | paletas de cores e conversão RGB → 256 cores |
@@ -354,8 +391,11 @@ embutido é um emulador VT de verdade (`terminal.cpp`), que lê os bytes do
   máquina; arquivos binários também são recusados, com aviso.
 - O realce de sintaxe é por expressões simples, não um parser de verdade. Em
   particular: no JSX, `<` só vira tag quando aparece onde um valor pode
-  começar (para não colorir `a < b`); e no CSS uma declaração que se espalhe
-  por várias linhas perde o contexto de "valor" na linha seguinte.
+  começar (para não colorir `a < b`); no CSS uma declaração que se espalhe
+  por várias linhas perde o contexto de "valor" na linha seguinte; e em
+  Haskell, OCaml e VHDL o apóstrofo só vira caractere na forma curta `'x'`,
+  porque nessas linguagens ele também faz parte de nomes (`foo'`, `'a`,
+  `clk'event`).
 - O emulador de terminal cobre o essencial (cores, tela alternativa, regiões
   de rolagem). Programas muito exóticos podem desenhar torto.
 - A área de transferência é interna ao editor; para trocar texto com outros

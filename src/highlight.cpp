@@ -129,6 +129,65 @@ const std::set<std::string>& keywords_for(Lang lang) {
       "temporary", "then", "to", "transaction", "trigger", "true", "truncate",
       "union", "unique", "update", "use", "using", "values", "view", "when",
       "where", "window", "with"};
+  static const std::set<std::string> ruby_kw = {
+      "alias", "and", "begin", "break", "case", "class", "def", "defined?",
+      "do", "else", "elsif", "end", "ensure", "extend", "false", "for",
+      "if", "in", "include", "lambda", "module", "next", "nil", "not", "or",
+      "proc", "raise", "redo", "require", "require_relative", "rescue",
+      "retry", "return", "self", "super", "then", "true", "undef", "unless",
+      "until", "when", "while", "yield",
+      "attr_accessor", "attr_reader", "attr_writer", "private", "protected",
+      "public", "puts", "print", "new"};
+  static const std::set<std::string> cs_kw = {
+      "abstract", "as", "async", "await", "base", "break", "case", "catch",
+      "checked", "class", "const", "continue", "default", "delegate", "do",
+      "else", "enum", "event", "explicit", "extern", "false", "finally",
+      "fixed", "for", "foreach", "get", "goto", "if", "implicit", "in",
+      "init", "interface", "internal", "is", "lock", "namespace", "nameof",
+      "new", "null", "operator", "out", "override", "params", "partial",
+      "private", "protected", "public", "readonly", "record", "ref", "return",
+      "sealed", "set", "sizeof", "stackalloc", "static", "struct", "switch",
+      "this", "throw", "true", "try", "typeof", "unchecked", "unsafe",
+      "using", "value", "virtual", "volatile", "when", "where", "while",
+      "yield"};
+  static const std::set<std::string> hs_kw = {
+      "case", "class", "data", "default", "deriving", "do", "else", "foreign",
+      "if", "import", "in", "infix", "infixl", "infixr", "instance", "let",
+      "module", "newtype", "of", "then", "type", "where"};
+  static const std::set<std::string> ml_kw = {
+      "and", "as", "assert", "begin", "class", "constraint", "do", "done",
+      "downto", "else", "end", "exception", "external", "false", "for", "fun",
+      "function", "functor", "if", "in", "include", "inherit", "initializer",
+      "lazy", "let", "match", "method", "module", "mutable", "new", "nonrec",
+      "object", "of", "open", "or", "private", "rec", "sig", "struct", "then",
+      "to", "true", "try", "type", "val", "virtual", "when", "while", "with"};
+  static const std::set<std::string> verilog_kw = {
+      "always", "always_comb", "always_ff", "always_latch", "assign",
+      "automatic", "begin", "case", "casex", "casez", "class", "default",
+      "defparam", "disable", "else", "end", "endcase", "endclass",
+      "endfunction", "endgenerate", "endinterface", "endmodule", "endpackage",
+      "endtask", "extends", "for", "forever", "fork", "function", "generate",
+      "genvar", "if", "implements", "import", "initial", "inout", "input",
+      "interface", "join", "localparam", "modport", "module", "negedge",
+      "output", "package", "parameter", "posedge", "repeat", "return",
+      "signed", "task", "typedef", "unsigned", "virtual", "wait", "while",
+      "assert", "property", "endproperty", "covergroup", "endgroup"};
+  // VHDL nao diferencia maiusculas de minusculas: guardamos em minusculo, como
+  // no SQL, e a palavra lida do texto e convertida antes da busca.
+  static const std::set<std::string> vhdl_kw = {
+      "abs", "access", "after", "alias", "all", "and", "architecture", "array",
+      "assert", "attribute", "begin", "block", "body", "buffer", "bus", "case",
+      "component", "configuration", "constant", "disconnect", "downto", "else",
+      "elsif", "end", "entity", "exit", "file", "for", "function", "generate",
+      "generic", "group", "guarded", "if", "impure", "in", "inertial", "inout",
+      "is", "label", "library", "linkage", "literal", "loop", "map", "mod",
+      "nand", "new", "next", "nor", "not", "null", "of", "on", "open", "or",
+      "others", "out", "package", "port", "postponed", "procedure", "process",
+      "pure", "range", "record", "register", "reject", "rem", "report",
+      "return", "rol", "ror", "select", "severity", "shared", "signal", "sla",
+      "sll", "sra", "srl", "subtype", "then", "to", "transport", "type",
+      "unaffected", "units", "until", "use", "variable", "wait", "when",
+      "while", "with", "xnor", "xor"};
   static const std::set<std::string> none;
 
   switch (lang) {
@@ -139,6 +198,13 @@ const std::set<std::string>& keywords_for(Lang lang) {
     case Lang::Shell:
     case Lang::Make: return sh_kw;
     case Lang::Sql: return sql_kw;
+    case Lang::Ruby:
+    case Lang::Erb: return ruby_kw;
+    case Lang::CSharp: return cs_kw;
+    case Lang::Haskell: return hs_kw;
+    case Lang::OCaml: return ml_kw;
+    case Lang::Verilog: return verilog_kw;
+    case Lang::Vhdl: return vhdl_kw;
     default: return none;
   }
 }
@@ -178,6 +244,43 @@ const std::set<std::string>& types_for(Lang lang) {
       "current_timestamp", "date_trunc", "extract", "greatest", "least",
       "length", "lower", "max", "min", "now", "nullif", "round", "row_number",
       "substring", "sum", "trim", "upper"};
+  // Ruby: as classes do nucleo e os metodos que a turma usa desde o primeiro
+  // dia. Constantes definidas pelo usuario ja ficam destacadas pela regra da
+  // maiuscula, entao aqui vao so as embutidas.
+  static const std::set<std::string> ruby_types = {
+      "Array", "BasicObject", "Class", "Comparable", "Dir", "Enumerable",
+      "Exception", "File", "Float", "Hash", "IO", "Integer", "Kernel",
+      "Module", "Numeric", "Object", "Proc", "Range", "Regexp", "RuntimeError",
+      "Set", "StandardError", "String", "Struct", "Symbol", "Time",
+      "each", "map", "select", "reject", "reduce", "inject", "length", "size",
+      "push", "pop", "first", "last", "to_s", "to_i", "to_a", "to_sym"};
+  static const std::set<std::string> cs_types = {
+      "bool", "byte", "char", "decimal", "double", "dynamic", "float", "int",
+      "long", "object", "sbyte", "short", "string", "uint", "ulong", "ushort",
+      "var", "void",
+      "Console", "Dictionary", "Exception", "IEnumerable", "List", "Nullable",
+      "Task", "String", "Int32", "Int64", "Boolean", "Double", "DateTime",
+      "Guid", "Math", "Convert", "LINQ"};
+  static const std::set<std::string> hs_types = {
+      "Bool", "Char", "Double", "Either", "Float", "IO", "Int", "Integer",
+      "Maybe", "Ordering", "Rational", "String", "Word",
+      "True", "False", "Just", "Nothing", "Left", "Right", "LT", "EQ", "GT",
+      "map", "filter", "foldr", "foldl", "length", "return", "putStrLn",
+      "print", "show", "read"};
+  static const std::set<std::string> ml_types = {
+      "array", "bool", "bytes", "char", "exn", "float", "int", "list", "option",
+      "ref", "string", "unit",
+      "None", "Some", "List", "Array", "String", "Printf", "Hashtbl", "Map",
+      "print_endline", "print_string", "failwith", "raise", "ignore"};
+  static const std::set<std::string> verilog_kw_types = {
+      "bit", "byte", "chandle", "event", "int", "integer", "logic", "longint",
+      "real", "realtime", "reg", "shortint", "shortreal", "string", "supply0",
+      "supply1", "time", "tri", "triand", "trior", "wand", "wire", "wor"};
+  static const std::set<std::string> vhdl_types = {
+      "bit", "bit_vector", "boolean", "character", "delay_length", "integer",
+      "natural", "positive", "real", "severity_level", "signed", "std_logic",
+      "std_logic_vector", "std_ulogic", "std_ulogic_vector", "string", "time",
+      "unsigned", "ieee", "numeric_std", "std_logic_1164", "work", "textio"};
   static const std::set<std::string> none;
   switch (lang) {
     case Lang::Sql: return sql_types;
@@ -185,6 +288,13 @@ const std::set<std::string>& types_for(Lang lang) {
     case Lang::Cpp: return cpp_types;
     case Lang::Python: return py_types;
     case Lang::JavaScript: return js_types;
+    case Lang::Ruby:
+    case Lang::Erb: return ruby_types;
+    case Lang::CSharp: return cs_types;
+    case Lang::Haskell: return hs_types;
+    case Lang::OCaml: return ml_types;
+    case Lang::Verilog: return verilog_kw_types;
+    case Lang::Vhdl: return vhdl_types;
     default: return none;
   }
 }
@@ -195,6 +305,19 @@ std::string ext_of(const std::string& path) {
   size_t dot = name.find_last_of('.');
   if (dot == std::string::npos) return name;  // sem extensao: devolve o nome
   return lower(name.substr(dot + 1));
+}
+
+// Em Haskell, OCaml, VHDL e Verilog o apostrofo nao delimita so caractere: ele
+// entra em nomes (foo'), em variaveis de tipo ('a), em atributos (clk'event) e
+// em bases numericas (8'hFF). Nessas linguagens so tratamos como caractere a
+// forma curta 'x' ou '\n' - o resto e deixado para as outras regras.
+bool is_char_literal(const std::string& s, size_t i, size_t to) {
+  if (i + 3 < to && s[i + 1] == '\\') {
+    for (size_t j = i + 2; j < to && j <= i + 4; j++)
+      if (s[j] == '\'') return true;
+    return false;
+  }
+  return i + 2 < to && s[i + 2] == '\'';
 }
 
 // Uma tag JSX so e uma tag se o '<' aparecer onde um *valor* pode comecar
@@ -216,10 +339,17 @@ CommentSyntax comment_syntax(Lang lang) {
   switch (lang) {
     case Lang::C:
     case Lang::Cpp:
+    case Lang::CSharp:
+    case Lang::Verilog:
     case Lang::JavaScript: return {"//", "/*", "*/"};
     case Lang::Python:
     case Lang::Shell:
     case Lang::Make: return {"#", "", ""};
+    case Lang::Ruby: return {"#", "=begin", "=end"};
+    case Lang::Erb: return {"", "<%#", "%>"};
+    case Lang::Haskell: return {"--", "{-", "-}"};
+    case Lang::OCaml: return {"", "(*", "*)"};
+    case Lang::Vhdl:
     case Lang::Sql: return {"--", "/*", "*/"};
     case Lang::Css: return {"", "/*", "*/"};
     case Lang::Html:
@@ -239,7 +369,20 @@ AutoCloseSyntax auto_close_syntax(Lang lang) {
       a.tags = true;
       break;
     case Lang::Shell:
+    case Lang::Ruby:
       a.backtick = true;        // `comando` (substituicao)
+      break;
+    case Lang::Erb:
+      a.tags = true;            // e HTML por baixo
+      break;
+    case Lang::OCaml:
+    case Lang::Haskell:
+      // O apostrofo faz parte do nome (foo', 'a): fechar sozinho atrapalha.
+      a.single_quote = false;
+      break;
+    case Lang::Vhdl:
+      // 'clk'event' e atributo, nao caractere.
+      a.single_quote = false;
       break;
     case Lang::Json:
       a.single_quote = false;   // JSON nao tem string de aspas simples
@@ -278,7 +421,19 @@ Lang Highlighter::detect(const std::string& path) {
   if (e == "css" || e == "scss" || e == "sass" || e == "less") return Lang::Css;
   if (e == "sql" || e == "psql" || e == "pgsql" || e == "mysql" || e == "ddl")
     return Lang::Sql;
-  if (e == "sh" || e == "bash" || e == "zsh" || e == ".bashrc") return Lang::Shell;
+  if (e == "sh" || e == "bash" || e == "zsh" || e == "bashrc" ||
+      e == ".bashrc" || e == "bash_profile" || e == "profile" ||
+      e == "zshrc" || e == "ksh")
+    return Lang::Shell;
+  if (e == "rb" || e == "rake" || e == "gemspec" || e == "ru" ||
+      e == "Gemfile" || e == "Rakefile" || e == "podfile")
+    return Lang::Ruby;
+  if (e == "erb" || e == "rhtml") return Lang::Erb;
+  if (e == "cs" || e == "csx") return Lang::CSharp;
+  if (e == "hs" || e == "lhs") return Lang::Haskell;
+  if (e == "ml" || e == "mli" || e == "mll" || e == "mly") return Lang::OCaml;
+  if (e == "v" || e == "sv" || e == "svh" || e == "vh") return Lang::Verilog;
+  if (e == "vhd" || e == "vhdl") return Lang::Vhdl;
   if (e == "Makefile" || e == "makefile" || e == "mk") return Lang::Make;
   if (e == "md" || e == "markdown") return Lang::Markdown;
   if (e == "json") return Lang::Json;
@@ -299,6 +454,8 @@ int Highlighter::highlight(const std::string& line, int state_in,
       return scan_markdown(line, out);
     case Lang::Html:
       return scan_html(line, state_in, out);
+    case Lang::Erb:
+      return scan_erb(line, state_in, out);
     case Lang::Css:
       return scan_css(line, 0, line.size(), state_in, out);
     default:
@@ -328,7 +485,66 @@ int Highlighter::scan_markdown(const std::string& line,
 }
 
 // ---------------------------------------------------------------------------
-// Linguagens "de codigo": C, C++, Python, JavaScript/JSX, Shell, Make
+// ERB (.erb, .rhtml): HTML com Ruby dentro de <% ... %>
+// ---------------------------------------------------------------------------
+//
+// Duas passadas: primeiro o HTML da linha inteira, depois os trechos de Ruby
+// repintados por cima. As duas escrevem no mesmo vetor por indice, entao a
+// segunda simplesmente vence - sai bem mais simples que interromper o scanner
+// de HTML no meio.
+//
+// O estado normal e o do proprio HTML (16 bits). So quando um <% fica aberto no
+// fim da linha e que trocamos para kErbTag, guardando o estado principal do
+// HTML nos bits de cima.
+int Highlighter::scan_erb(const std::string& line, int state_in,
+                          std::vector<int>* out) const {
+  const bool dentro = (main_state(state_in) == kErbTag);
+  const int html_in = dentro ? sub_state(state_in) : state_in;
+  const int html_out = scan_html(line, html_in, out);
+
+  size_t i = 0;
+  bool aberto = false;
+
+  // Continuacao de um <% que ficou aberto na linha anterior.
+  if (dentro) {
+    size_t end = line.find("%>");
+    if (end == std::string::npos) {
+      scan_code(line, 0, line.size(), kNormal, out, Lang::Ruby);
+      return pack(kErbTag, main_state(html_out));
+    }
+    scan_code(line, 0, end, kNormal, out, Lang::Ruby);
+    paint(out, end, std::min(end + 2, line.size()), ui::kSynPreproc);
+    i = end + 2;
+  }
+
+  while (i < line.size()) {
+    size_t open = line.find("<%", i);
+    if (open == std::string::npos) break;
+    // Marcadores logo depois do <%: "=" imprime, "-" apara espacos, "#" e
+    // comentario.
+    size_t rb = open + 2;
+    const bool comentario = (rb < line.size() && line[rb] == '#');
+    while (rb < line.size() && std::strchr("=-#", line[rb])) rb++;
+
+    const size_t end = line.find("%>", rb);
+    const size_t fim = (end == std::string::npos) ? line.size() : end;
+
+    paint(out, open, rb, ui::kSynPreproc);
+    if (comentario) paint(out, rb, fim, ui::kSynComment);
+    else scan_code(line, rb, fim, kNormal, out, Lang::Ruby);
+
+    if (end == std::string::npos) { aberto = true; break; }
+    paint(out, end, std::min(end + 2, line.size()), ui::kSynPreproc);
+    i = end + 2;
+  }
+
+  if (aberto) return pack(kErbTag, main_state(html_out));
+  return html_out;
+}
+
+// ---------------------------------------------------------------------------
+// Linguagens "de codigo": C, C++, Python, JavaScript/JSX, Shell, Make,
+// Ruby, C#, Haskell, OCaml, Verilog e VHDL
 // ---------------------------------------------------------------------------
 
 int Highlighter::scan_code(const std::string& line, size_t from, size_t to,
@@ -336,14 +552,24 @@ int Highlighter::scan_code(const std::string& line, size_t from, size_t to,
                            Lang lang) const {
   const auto& kw = keywords_for(lang);
   const auto& types = types_for(lang);
-  const bool c_like =
-      lang == Lang::C || lang == Lang::Cpp || lang == Lang::JavaScript;
+  const bool csharp = (lang == Lang::CSharp);
+  const bool verilog = (lang == Lang::Verilog);
+  const bool c_like = lang == Lang::C || lang == Lang::Cpp ||
+                      lang == Lang::JavaScript || csharp || verilog;
   const bool jsx = (lang == Lang::JavaScript);
   const bool sql = (lang == Lang::Sql);
-  const bool hash_comment =
-      lang == Lang::Python || lang == Lang::Shell || lang == Lang::Make;
-  const bool block_comment = c_like || sql;   // /* ... */
-  const bool ci_words = sql;                  // SELECT e select sao a mesma coisa
+  const bool ruby = (lang == Lang::Ruby || lang == Lang::Erb);
+  const bool haskell = (lang == Lang::Haskell);
+  const bool ocaml = (lang == Lang::OCaml);
+  const bool vhdl = (lang == Lang::Vhdl);
+  const bool shell = (lang == Lang::Shell);
+  const bool hash_comment = lang == Lang::Python || shell ||
+                            lang == Lang::Make || ruby;
+  const bool dash_comment = sql || haskell || vhdl;   // -- ate o fim da linha
+  const bool block_comment = c_like || sql;           // /* ... */
+  const bool ci_words = sql || vhdl;   // SELECT e select sao a mesma coisa
+  // Linguagens em que o apostrofo tem outros usos (veja is_char_literal).
+  const bool narrow_char = haskell || ocaml || vhdl || verilog;
 
   int state = main_state(state_in);
   size_t i = from;
@@ -382,12 +608,54 @@ int Highlighter::scan_code(const std::string& line, size_t from, size_t to,
     paint(out, i, j + 1, ui::kSynString);
     i = j + 1;
     state = kNormal;
+  } else if (state == kRubyComment) {
+    // =end tem que estar no comeco da linha para encerrar o bloco.
+    if (line.compare(0, 4, "=end") == 0) {
+      paint(out, i, to, ui::kSynComment);
+      return kNormal;
+    }
+    paint(out, i, to, ui::kSynComment);
+    return kRubyComment;
+  } else if (state == kHsComment || state == kMlComment) {
+    const char* term = (state == kHsComment) ? "-}" : "*)";
+    size_t end = find_in(line, term, i, to);
+    if (end == std::string::npos) {
+      paint(out, i, to, ui::kSynComment);
+      return state;
+    }
+    paint(out, i, end + 2, ui::kSynComment);
+    i = end + 2;
+    state = kNormal;
+  } else if (state == kCsVerbatim) {
+    // Numa string @"..." as aspas se escapam dobrando ("").
+    size_t j = i;
+    while (j < to) {
+      if (line[j] == '"') {
+        if (j + 1 < to && line[j + 1] == '"') { j += 2; continue; }
+        j++;
+        break;
+      }
+      j++;
+    }
+    if (j >= to && (to == 0 || line[to - 1] != '"')) {
+      paint(out, i, to, ui::kSynString);
+      return kCsVerbatim;
+    }
+    paint(out, i, std::min(j, to), ui::kSynString);
+    i = j;
+    state = kNormal;
   } else {
     state = kNormal;
   }
 
+  // --- comentario de bloco do Ruby: =begin / =end coluna 0 ---
+  if (ruby && from == 0 && i == 0 && line.compare(0, 6, "=begin") == 0) {
+    paint(out, 0, to, ui::kSynComment);
+    return kRubyComment;
+  }
+
   // --- diretiva de pre-processador ocupa a linha toda ---
-  if ((lang == Lang::C || lang == Lang::Cpp) && from == 0 && i == 0) {
+  if ((lang == Lang::C || lang == Lang::Cpp || csharp) && from == 0 && i == 0) {
     size_t f = line.find_first_not_of(" \t");
     if (f != std::string::npos && f < to && line[f] == '#') {
       size_t cmt = find_in(line, "//", f, to);
@@ -407,9 +675,22 @@ int Highlighter::scan_code(const std::string& line, size_t from, size_t to,
     const char c = line[i];
 
     // Comentarios.
-    if (sql && c == '-' && i + 1 < to && line[i + 1] == '-') {
+    if (dash_comment && c == '-' && i + 1 < to && line[i + 1] == '-') {
       paint(out, i, to, ui::kSynComment);
       return kNormal;
+    }
+    // {- ... -} do Haskell e (* ... *) do OCaml: atravessam linhas.
+    if ((haskell && c == '{' && i + 1 < to && line[i + 1] == '-') ||
+        (ocaml && c == '(' && i + 1 < to && line[i + 1] == '*')) {
+      const char* term = haskell ? "-}" : "*)";
+      size_t end = find_in(line, term, i + 2, to);
+      if (end == std::string::npos) {
+        paint(out, i, to, ui::kSynComment);
+        return haskell ? kHsComment : kMlComment;
+      }
+      paint(out, i, end + 2, ui::kSynComment);
+      i = end + 2;
+      continue;
     }
     if (block_comment && c == '/' && i + 1 < to) {
       if (c_like && line[i + 1] == '/') {
@@ -497,8 +778,95 @@ int Highlighter::scan_code(const std::string& line, size_t from, size_t to,
       continue;
     }
 
+    // C#: @"literal" (sem escapes, pode atravessar linhas) e $"interpolada".
+    if (csharp && (c == '@' || c == '$') && i + 1 < to && line[i + 1] == '"') {
+      if (c == '@') {
+        size_t j = i + 2;
+        while (j < to) {
+          if (line[j] == '"') {
+            if (j + 1 < to && line[j + 1] == '"') { j += 2; continue; }
+            j++;
+            break;
+          }
+          j++;
+        }
+        if (j >= to && (to == 0 || line[to - 1] != '"')) {
+          paint(out, i, to, ui::kSynString);
+          return kCsVerbatim;
+        }
+        paint(out, i, std::min(j, to), ui::kSynString);
+        i = j;
+        continue;
+      }
+      paint(out, i, i + 1, ui::kSynPreproc);
+      i++;
+      continue;   // a aspa seguinte cai na regra normal de string
+    }
+
+    // Verilog: diretivas `define, `include, `timescale.
+    if (verilog && c == '`' && i + 1 < to && ident_start(line[i + 1])) {
+      size_t j = i + 1;
+      while (j < to && ident_char(line[j])) j++;
+      paint(out, i, j, ui::kSynPreproc);
+      i = j;
+      continue;
+    }
+    // Verilog: base numerica, como 8'hFF, 4'b1010 ou 'd15.
+    if (verilog && c == '\'' && i + 1 < to &&
+        std::strchr("bodhBODHsS", line[i + 1])) {
+      size_t j = i + 1;
+      while (j < to && (std::isalnum(static_cast<unsigned char>(line[j])) ||
+                        line[j] == '_'))
+        j++;
+      paint(out, i, j, ui::kSynNumber);
+      i = j;
+      continue;
+    }
+
+    // Ruby: variaveis de instancia (@x), de classe (@@x) e globais ($x).
+    if (ruby && (c == '@' || c == '$') && i + 1 < to) {
+      size_t j = i + 1;
+      if (c == '@' && j < to && line[j] == '@') j++;
+      size_t name = j;
+      while (j < to && ident_char(line[j])) j++;
+      if (j > name) {
+        paint(out, i, j, ui::kSynPreproc);
+        i = j;
+        continue;
+      }
+    }
+    // Ruby: simbolo :nome. O "::" e escopo e "chave: valor" e hash - por isso
+    // exigimos que o caractere anterior nao faca parte de um nome nem seja ':'.
+    if (ruby && c == ':' && i + 1 < to && ident_start(line[i + 1]) &&
+        (i == from || (!ident_char(line[i - 1]) && line[i - 1] != ':'))) {
+      size_t j = i + 1;
+      while (j < to && ident_char(line[j])) j++;
+      if (j < to && (line[j] == '?' || line[j] == '!')) j++;
+      paint(out, i, j, ui::kSynType);
+      i = j;
+      continue;
+    }
+
+    // Shell: $VAR, ${...} e $1.
+    if (shell && c == '$' && i + 1 < to) {
+      size_t j = i + 1;
+      if (line[j] == '{') {
+        while (j < to && line[j] != '}') j++;
+        j = std::min(j + 1, to);
+      } else {
+        while (j < to && (ident_char(line[j]) || line[j] == '?' ||
+                          line[j] == '#' || line[j] == '@'))
+          j++;
+      }
+      if (j > i + 1) {
+        paint(out, i, j, ui::kSynPreproc);
+        i = j;
+        continue;
+      }
+    }
+
     // Strings e caracteres.
-    if (c == '"' || c == '\'') {
+    if (c == '"' || (c == '\'' && (!narrow_char || is_char_literal(line, i, to)))) {
       size_t j = i + 1;
       while (j < to) {
         if (line[j] == '\\') { j += 2; continue; }
@@ -550,10 +918,25 @@ int Highlighter::scan_code(const std::string& line, size_t from, size_t to,
     if (ident_start(c)) {
       size_t j = i;
       while (j < to && ident_char(line[j])) j++;
+      // Sufixos que fazem parte do nome: empty?/save! no Ruby, foo' em
+      // Haskell e OCaml.
+      if (ruby && j < to && (line[j] == '?' || line[j] == '!')) j++;
+      if (haskell || ocaml)
+        while (j < to && line[j] == '\'') j++;
+
       std::string word = line.substr(i, j - i);
       if (ci_words) word = lower(word);
-      if (kw.count(word)) paint(out, i, j, ui::kSynKeyword);
-      else if (types.count(word)) paint(out, i, j, ui::kSynType);
+      if (kw.count(word)) {
+        paint(out, i, j, ui::kSynKeyword);
+      } else if (types.count(word)) {
+        paint(out, i, j, ui::kSynType);
+      } else if ((ruby || haskell || ocaml) &&
+                 std::isupper(static_cast<unsigned char>(c))) {
+        // Nessas tres a maiuscula tem significado: constante e classe no Ruby,
+        // tipo e construtor em Haskell, modulo e construtor em OCaml. Em C# e
+        // nas de hardware nao ha essa convencao, entao a regra nao vale la.
+        paint(out, i, j, ui::kSynType);
+      }
       i = j;
       continue;
     }
