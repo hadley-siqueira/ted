@@ -561,8 +561,8 @@ void App::draw_help() {
       "",
       "BUSCA E NAVEGACAO                PAINEIS",
       "Ctrl+P  abrir arquivo pelo nome  F2/F3/F4  arquivos, editor, terminal",
-      "Ctrl+T  procurar nos abertos     F6 alterna regioes  F7 painel dividido",
-      "Ctrl+F  buscar no arquivo        Alt+V/Alt+H divide  Alt+W fecha painel",
+      "Ctrl+T  procurar nos abertos     F6 regioes  F7 paineis  F4 terminais",
+      "Ctrl+F  buscar no arquivo        Alt+V/H divide  Alt+W fecha  Alt+T term",
       "F3 / Shift+F3  proxima / ant.    Ctrl+B/Ctrl+J esconde arquivos/terminal",
       "Ctrl+R  substituir tudo          Alt+Setas redimensiona  F5 recarrega",
       "Ctrl+G  ir para a linha          F9 mouse  Shift+PgUp/PgDn  historico",
@@ -645,11 +645,13 @@ void App::draw() {
   // --- terminal ---
   if (g_config.show_terminal && term_rect_.h > 0) {
     std::string right;
-    if (!term_.running()) right = "encerrado - Enter reinicia";
-    else if (term_.view_offset() > 0)
-      right = "historico -" + std::to_string(term_.view_offset());
-    draw_pane_title(term_title_, "TERMINAL", focus_ == Focus::Terminal, right);
-    term_.draw(term_rect_, focus_ == Focus::Terminal);
+    if (Terminal* t = term()) {
+      if (!t->running()) right = "encerrado - Enter reinicia";
+      else if (t->view_offset() > 0)
+        right = "historico -" + std::to_string(t->view_offset());
+    }
+    draw_terminal_tabs(right);
+    if (Terminal* t = term()) t->draw(term_rect_, focus_ == Focus::Terminal);
   }
 
   draw_statusbar();
@@ -691,7 +693,7 @@ void App::place_cursor() {
       }
       break;
     case Focus::Terminal:
-      if (term_.cursor_screen(&x, &y)) {
+      if (term() && term()->cursor_screen(&x, &y)) {
         move(y, x);
         curs_set(1);
       } else {
@@ -726,15 +728,107 @@ void App::set_focus(Focus f) {
   needs_redraw_ = true;
 }
 
+Terminal* App::term() {
+  if (terms_.empty()) return nullptr;
+  cur_term_ = std::min(std::max(cur_term_, 0), static_cast<int>(terms_.size()) - 1);
+  return terms_[cur_term_].get();
+}
+
 void App::ensure_terminal() {
-  if (term_.running() || !g_config.show_terminal) return;
+  if (!g_config.show_terminal) return;
+  if (terms_.empty()) terms_.push_back(std::make_unique<Terminal>());
+  Terminal* t = term();
+  if (!t || t->running()) return;
   compute_layout();
   std::string err;
-  if (!term_.start(tree_.root(), std::max(2, term_rect_.w ? term_rect_.w : 80),
-                   std::max(2, term_rect_.h ? term_rect_.h : 10), &err)) {
+  if (!t->start(tree_.root(), std::max(2, term_rect_.w ? term_rect_.w : 80),
+                std::max(2, term_rect_.h ? term_rect_.h : 10), &err)) {
     message("Terminal: " + err, true);
     g_config.show_terminal = false;
   }
+}
+
+// Teto de terminais. Cada um e um shell de verdade com o proprio pty; passar
+// disso e mais confusao do que ajuda numa tela de terminal.
+static constexpr size_t kMaxTerminals = 6;
+
+void App::new_terminal() {
+  if (!g_config.show_terminal) g_config.show_terminal = true;
+  if (terms_.size() >= kMaxTerminals) {
+    message("Maximo de " + std::to_string(kMaxTerminals) + " terminais.", true);
+    set_focus(Focus::Terminal);
+    return;
+  }
+  compute_layout();
+  auto t = std::make_unique<Terminal>();
+  std::string err;
+  if (!t->start(tree_.root(), std::max(2, term_rect_.w ? term_rect_.w : 80),
+                std::max(2, term_rect_.h ? term_rect_.h : 10), &err)) {
+    message("Terminal: " + err, true);
+    return;
+  }
+  terms_.push_back(std::move(t));
+  cur_term_ = static_cast<int>(terms_.size()) - 1;
+  set_focus(Focus::Terminal);
+  needs_redraw_ = true;
+}
+
+void App::close_terminal() {
+  if (terms_.size() <= 1) {
+    message("So ha um terminal (Alt+T abre outro).");
+    return;
+  }
+  terms_.erase(terms_.begin() + cur_term_);
+  if (cur_term_ >= static_cast<int>(terms_.size()))
+    cur_term_ = static_cast<int>(terms_.size()) - 1;
+  needs_redraw_ = true;
+}
+
+void App::next_terminal(int delta) {
+  if (terms_.size() < 2) return;
+  const int n = static_cast<int>(terms_.size());
+  cur_term_ = ((cur_term_ + delta) % n + n) % n;
+  needs_redraw_ = true;
+}
+
+// A linha de titulo do painel do terminal. Com um terminal so ela desenha
+// exatamente o que desenhava antes das abas ("TERMINAL" + o texto da direita);
+// com mais de um, vira uma barra de abas numerada.
+void App::draw_terminal_tabs(const std::string& right) {
+  const Rect& r = term_title_;
+  if (r.w <= 0 || r.h <= 0) return;
+  const bool foco = (focus_ == Focus::Terminal);
+
+  if (terms_.size() <= 1) {
+    draw_pane_title(r, "TERMINAL", foco, right);
+    return;
+  }
+
+  attrset(COLOR_PAIR(foco ? ui::kPaneTitleActive : ui::kPaneTitle) | A_BOLD);
+  ui::fill(r.y, r.x, r.w);
+  int x = r.x + 1;
+  for (size_t i = 0; i < terms_.size(); i++) {
+    const std::string label = " " + std::to_string(i + 1) +
+                              (terms_[i]->running() ? "" : "!") + " ";
+    const int w = utf8::width(label, 4);
+    if (x + w > r.x + r.w) break;
+    const bool act = (static_cast<int>(i) == cur_term_);
+    attrset(COLOR_PAIR(act ? (foco ? ui::kTabActive : ui::kTabActiveDim)
+                           : (foco ? ui::kPaneTitleActive : ui::kPaneTitle)) |
+            A_BOLD);
+    ui::fill(r.y, x, w);
+    ui::put(r.y, x, w, label);
+    x += w;
+  }
+  if (!right.empty()) {
+    const int w = utf8::width(right, 4);
+    const int rx = r.x + r.w - w - 1;
+    if (rx > x + 1) {
+      attrset(COLOR_PAIR(foco ? ui::kPaneTitleActive : ui::kPaneTitle));
+      ui::put(r.y, rx, w, right);
+    }
+  }
+  attrset(COLOR_PAIR(ui::kNormal));
 }
 
 void App::ask(const std::string& label, const std::string& initial,
@@ -1181,7 +1275,7 @@ void App::handle_paste() {
   }
   timeout(20);
   if (text.empty()) return;
-  if (focus_ == Focus::Terminal) term_.send_text(text, true);
+  if (focus_ == Focus::Terminal && term()) term()->send_text(text, true);
   else if (EditorView* v = active()) v->insert_text(text);
   needs_redraw_ = true;
 }
@@ -1193,8 +1287,9 @@ void App::handle_mouse(const ui::KeyEvent& ev) {
   if (ev.wheel_up || ev.wheel_down) {
     int dir = ev.wheel_up ? -3 : 3;
     if (g_config.show_sidebar && sidebar_.contains(x, y)) tree_.scroll_by(dir);
-    else if (g_config.show_terminal && term_rect_.contains(x, y))
-      term_.scroll_view(dir);
+    else if (g_config.show_terminal && term_rect_.contains(x, y)) {
+      if (Terminal* t = term()) t->scroll_view(dir);
+    }
     else {
       // A roda age no painel sob o ponteiro; fora deles, no painel com o foco.
       const PaneRef pr = pane_at(x, y);
@@ -1281,7 +1376,12 @@ bool App::handle_global_key(const ui::KeyEvent& ev) {
             !active()->find_next(false, true))
           message("Nao encontrado.", true);
         return true;
-      case KEY_F(4): set_focus(Focus::Terminal); return true;
+      // F4 leva o foco para o terminal; ja estando la, passa para o proximo.
+      // Com um terminal so, apertar de novo nao muda nada - igual a antes.
+      case KEY_F(4):
+        if (focus_ == Focus::Terminal) next_terminal(+1);
+        else set_focus(Focus::Terminal);
+        return true;
       case KEY_F(5): tree_.refresh(); message("Lista de arquivos atualizada."); return true;
       case KEY_F(6): {
         Focus order[3] = {Focus::Sidebar, Focus::Editor, Focus::Terminal};
@@ -1329,7 +1429,13 @@ bool App::handle_global_key(const ui::KeyEvent& ev) {
       case 's': case 'S': save(true); return true;
       case 'v': case 'V': split_vertical(); return true;
       case 'h': case 'H': split_horizontal(); return true;
-      case 'w': case 'W': close_pane(); return true;
+      case 't': case 'T': new_terminal(); return true;
+      // Alt+W fecha "o que esta em foco": com o terminal em foco e mais de um
+      // aberto, fecha o terminal; nos demais casos, o painel do editor.
+      case 'w': case 'W':
+        if (focus_ == Focus::Terminal && terms_.size() > 1) close_terminal();
+        else close_pane();
+        return true;
       default: break;
     }
   }
@@ -1567,7 +1673,7 @@ void App::handle_key(const ui::KeyEvent& ev) {
     if (code == KEY_RESIZE) {
       compute_layout();
       if (term_rect_.w > 0 && term_rect_.h > 0)
-        term_.resize(term_rect_.w, term_rect_.h);
+        for (auto& t : terms_) t->resize(term_rect_.w, term_rect_.h);
       clear();
       return;
     }
@@ -1587,7 +1693,9 @@ void App::handle_key(const ui::KeyEvent& ev) {
       return;
     }
     case Focus::Terminal: {
-      if (!term_.running()) {
+      Terminal* t = term();
+      if (!t) { ensure_terminal(); return; }
+      if (!t->running()) {
         if ((!ev.is_code && (ev.ch == '\r' || ev.ch == '\n')) ||
             (ev.is_code && static_cast<int>(ev.ch) == KEY_ENTER)) {
           ensure_terminal();
@@ -1596,15 +1704,15 @@ void App::handle_key(const ui::KeyEvent& ev) {
       }
       if (ev.is_code) {
         int code = static_cast<int>(ev.ch);
-        if (code == ui::K_SHIFT_PGUP) { term_.scroll_view(-term_rect_.h / 2); return; }
-        if (code == ui::K_SHIFT_PGDN) { term_.scroll_view(term_rect_.h / 2); return; }
+        if (code == ui::K_SHIFT_PGUP) { t->scroll_view(-term_rect_.h / 2); return; }
+        if (code == ui::K_SHIFT_PGDN) { t->scroll_view(term_rect_.h / 2); return; }
       }
       if (ev.ctrl('V') && !clipboard_.empty()) {
-        term_.send_text(clipboard_, true);
+        t->send_text(clipboard_, true);
         return;
       }
-      term_.clear_view_scroll();
-      term_.send_key(ev);
+      t->clear_view_scroll();
+      t->send_key(ev);
       return;
     }
     case Focus::Editor:
@@ -1623,7 +1731,14 @@ int App::run() {
   if (g_config.show_terminal) ensure_terminal();
 
   while (!quit_) {
-    if (term_.running() && term_.poll_output()) needs_redraw_ = true;
+    // Le a saida de *todos* os terminais, nao so do visivel: se ninguem ler o
+    // pty de um "npm run dev" que ficou para tras, o buffer enche e o processo
+    // trava. Redesenhar, so quando o visivel muda.
+    for (size_t i = 0; i < terms_.size(); i++) {
+      if (!terms_[i]->running()) continue;
+      if (terms_[i]->poll_output() && static_cast<int>(i) == cur_term_)
+        needs_redraw_ = true;
+    }
 
     if (needs_redraw_) {
       draw();

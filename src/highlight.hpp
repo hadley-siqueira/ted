@@ -22,6 +22,17 @@ struct CommentSyntax {
 };
 CommentSyntax comment_syntax(Lang lang);
 
+// O que cada linguagem fecha sozinha quando 'auto_close' esta ligado. Os pares
+// ( [ { valem em toda linguagem; as aspas nao: em Markdown e texto puro o
+// apostrofo e pontuacao de prosa ("nao e" viraria "nao e''"), nao delimitador.
+struct AutoCloseSyntax {
+  bool double_quote = true;   // "
+  bool single_quote = true;   // '
+  bool backtick = false;      // ` : template literal do JS, cerca do Markdown
+  bool tags = false;          // <div> vira <div></div>
+};
+AutoCloseSyntax auto_close_syntax(Lang lang);
+
 class Highlighter {
  public:
   static Lang detect(const std::string& path);

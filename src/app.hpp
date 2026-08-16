@@ -113,6 +113,13 @@ class App {
                   std::function<void(char)> cb);  // 's', 'n' ou 'c'
   bool prompt_key(const ui::KeyEvent& ev);        // devolve true se consumiu
 
+  // --- terminais -----------------------------------------------------------
+  Terminal* term();                   // o terminal visivel (nullptr se nenhum)
+  void draw_terminal_tabs(const std::string& right);
+  void new_terminal();
+  void close_terminal();
+  void next_terminal(int delta);
+
   void message(const std::string& msg, bool error = false);
   void set_focus(Focus f);
   void ensure_terminal();
@@ -122,7 +129,11 @@ class App {
   FileTree tree_;
   std::vector<PaneColumn> cols_;      // a grade de paineis (hoje: 1x1)
   int cur_col_ = 0, cur_row_ = 0;     // qual painel tem o foco
-  Terminal term_;
+  // Varios terminais, um por aba do painel de baixo: com "npm run dev" e
+  // "node server.js" rodando ainda sobra um shell para npm/git. unique_ptr
+  // porque Terminal segura um fd e um pid - nao e copiavel.
+  std::vector<std::unique_ptr<Terminal>> terms_;
+  int cur_term_ = 0;
   Picker picker_;
   std::vector<std::string> file_cache_;   // caminhos relativos, para o Ctrl+P
   bool file_cache_truncated_ = false;

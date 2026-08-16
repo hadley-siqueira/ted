@@ -5,8 +5,29 @@ sessão). O `README.md` documenta o editor para quem **usa**; este arquivo
 guarda o que ficou na cabeça de quem **escreveu**: decisões, armadilhas, bugs
 já resolvidos e o que fazer em seguida.
 
-Estado: ~6.500 linhas de C++17 em `src/` (25 arquivos), compila com `g++` e
+Estado: ~7.000 linhas de C++17 em `src/` (25 arquivos), compila com `g++` e
 `ncursesw`, sem nenhuma outra dependência. `make` gera `./ted`.
+
+## Para que serve (leia antes de priorizar)
+
+**O uso principal é desenvolvimento web: Node.js, Express, React.** Não é uma
+turma de C. Isso não dá para deduzir do código, e o `README.md` induz ao erro:
+ele abre com `main.c` e `gcc main.c && ./a.out`, e dedica um bloco à regra do
+TAB no Makefile. Uma sessão já foi priorizada errada por causa disso.
+
+O que a stack implica na prática:
+
+- **Vários processos ao mesmo tempo**: `npm run dev` (Vite), `node server.js`
+  ou `nodemon`, mais um shell livre para `npm install`/`git`. Um terminal só
+  não serve — foi o que motivou as abas de terminal (§8.1).
+- **O erro chega em tempo de execução, não ao compilar.** A stack trace do Node
+  aparece toda vez que se salva um arquivo quebrado, não só quando se manda
+  compilar. Isso torna "pular para o erro" (§5) mais valioso, não menos.
+- **Já está coberto**: `node_modules` é ignorado na varredura do `Ctrl+P`
+  (`is_noise()` em `filetree.cpp`, e ali o filtro é incondicional); `.ts`,
+  `.tsx`, `.vue` e `.svelte` já caem no realce de JavaScript.
+- **Pendência de documentação**: o `README.md` precisa de uma passada para
+  parar de se apresentar como editor de C.
 
 ---
 
@@ -138,29 +159,50 @@ Para crash, `gdb` em modo batch dentro do tmux funciona bem:
 
 ## 5. Backlog recomendado (em ordem)
 
-1. **Pular para o erro do compilador** (~150 linhas). `F8` e clique sobre
-   `arquivo:linha:coluna` na saída do terminal embutido abrem o arquivo na
-   posição. Fecha o ciclo compilar → erro → corrigir, que é o dia a dia da
-   turma. O `Terminal` já tem a matriz de células e o histórico; reaproveitar
-   `open_file()` + `EditorView::select_range()`.
-2. **Salvar ao trocar o foco para o terminal** (~10 linhas, dentro de
-   `set_focus()`, com opção `save_on_focus_change` no `ted.conf`). Elimina o
-   erro nº 1 do iniciante: editar, compilar e não entender por que nada mudou.
-3. **Área de transferência do sistema** (~80 linhas). Hoje `Ctrl+C` só copia
-   dentro do editor. Precisa de duas vias: `wl-copy`/`xclip` quando existirem e
-   OSC 52 como reserva — **só OSC 52 não basta**, o GNOME Terminal (padrão do
-   Ubuntu) não suporta.
-4. **Restaurar sessão** ao reabrir o projeto (~80 linhas): mesmas abas, mesma
-   linha.
-5. **Busca em todo o projeto** — é a fase 3 do `Ctrl+T`, e a varredura de
-   arquivos do `Ctrl+P` já existe.
-6. **Divisão de painéis** (split vertical e horizontal, ~350 linhas). Plano
-   detalhado na §7.
+Reordenado depois que a stack alvo ficou clara (veja "Para que serve", no topo).
 
-**Evitar por ora**: quebra automática de linha (contamina cursor, seleção,
-rolagem e desenho da `EditorView` inteira — hoje linha do arquivo = linha da
-tela), múltiplos cursores, LSP/autocomplete e git integrado. São de usuário
-avançado e aumentam a superfície de confusão para quem nunca usou editor.
+1. **Pular para o erro** (~150 linhas + um acessor novo no `Terminal`). `F8` e
+   clique sobre `arquivo:linha:coluna` na saída do terminal abrem o arquivo na
+   posição. Reaproveitar `open_file()` + `EditorView::select_range()`.
+   **`Terminal` hoje não expõe o texto da tela nem o histórico — só `draw()`.**
+   Precisa de algo como `std::string line_text(int row) const`.
+   O parser tem que cobrir os formatos do Node, não só `arquivo:linha:coluna`:
+   ```
+   at Object.<anonymous> (/home/aluno/app/index.js:3:15)   ← entre parênteses
+   /src/App.jsx:12:5                                        ← relativo (Vite)
+   ```
+   **Pré-requisito já pago**: sem a invariante §2.7 ("um arquivo, um
+   `Document`"), pular para um erro num arquivo já aberto em outro painel
+   criaria um segundo buffer e o próximo `Ctrl+S` apagaria o trabalho.
+2. **Redimensionar os painéis divididos** (§7.5, ~30 linhas). Subiu de
+   prioridade por causa do `Alt+H`: repartir 12 linhas em 6/6 dói mais do que
+   repartir 54 colunas.
+3. **Busca em todo o projeto** (~60 linhas, era ~100). Ficou mais barata: o
+   encanamento do `Ctrl+T` (`pane_order()`, `PickerItem::pane`, dedup por
+   `Document`) é o que uma busca global precisa para o resultado aterrissar no
+   painel certo, e `FileTree::list_all_files()` já varre o projeto.
+4. **Área de transferência do sistema** (~80 linhas). `wl-copy`/`xclip` quando
+   existirem e OSC 52 como reserva — **só OSC 52 não basta**, o GNOME Terminal
+   (padrão do Ubuntu) não suporta. Baixou de prioridade: é trabalho de
+   compatibilidade que varia por máquina, e o `F9` já dá uma saída aceitável.
+5. **Restaurar sessão** ao reabrir o projeto. O escopo cresceu com os painéis
+   (agora teria que salvar o layout da grade, não só as abas) e o valor numa
+   aula de uma hora é baixo.
+
+**Saiu do backlog**: "salvar ao trocar o foco para o terminal". Ela existia
+para o erro do iniciante que compila sem salvar; com hot reload (`nodemon`,
+Vite) o aluno salva o tempo todo por reflexo, e o problema quase não acontece.
+
+**Evitar por ora**: múltiplos cursores, LSP/autocomplete e git integrado. São
+de usuário avançado e aumentam a superfície de confusão para quem nunca usou
+editor.
+
+**Quebra automática de linha: decidido que NÃO.** Reafirmado pelo autor em
+agosto/2026. Registrando a tentação para não relitigar: JSX indenta fundo e um
+painel dividido fica com ~21 colunas de código, então a rolagem horizontal
+incomoda de verdade nessa stack. Mesmo assim o custo continua o que sempre foi
+— contamina cursor, seleção, rolagem e desenho da `EditorView` inteira, porque
+hoje **linha do arquivo = linha da tela**.
 
 ---
 
@@ -431,3 +473,99 @@ cima do próprio caminho, que é o `Ctrl+S` normal, continua passando).
 Mais três encontrados na mesma varredura, todos na tabela da §3: o `Ctrl+W`
 que mentia, o realce que só mudava num painel, e a barra de abas que escondia
 a aba ativa em painel estreito.
+
+---
+
+## 8. Plano: terminais múltiplos, auto-close e par de chaves
+
+Três funcionalidades pedidas depois que a stack alvo ficou clara.
+**Estado: as três feitas.**
+
+### 8.1 Abas no painel do terminal — FEITA
+
+**Problema**: `App` tem um `Terminal term_`. Com `npm run dev` e `node
+server.js` rodando, não sobra shell para `npm install` ou `git` — e os dois
+primeiros não terminam nunca. É o único item da lista que hoje *impede* o
+fluxo de trabalho em vez de só incomodar.
+
+**Escolhido: abas no painel do terminal** (opção "a"), e não terminais como
+painéis da grade (opção "b"). A (a) resolve o problema reaproveitando a linha
+de título que já existe e a lógica de barra de abas que os painéis já usam;
+a (b) exigiria `Pane` virar "ou editor ou terminal", contaminando `pane_at()`,
+`close_pane()` e `next_pane()`. A (b) continua possível depois.
+
+- `Terminal term_` vira `std::vector<std::unique_ptr<Terminal>> terms_` +
+  `cur_term_`. `unique_ptr` porque `Terminal` tem `fd` e `pid` — não é copiável.
+- A linha `term_title_` passa a desenhar as abas. **Com um terminal só ela
+  desenha exatamente o que desenha hoje** ("TERMINAL" + o texto da direita),
+  para a suíte de regressão continuar válida.
+- `Alt+T` cria; `F4` foca e, se já estiver focado, passa para o próximo.
+  Com um terminal só, o segundo `F4` não muda nada — igual a hoje.
+- `Alt+W` com foco no terminal fecha o terminal (se houver mais de um); senão
+  cai no `close_pane()` de sempre. É a única tecla com significado
+  dependente de foco, e vale porque "fecha o que está em foco" é o que se
+  espera.
+
+**A armadilha**: `poll_output()` tem que rodar em **todos** os terminais a cada
+volta do laço, não só no visível. Se o `npm run dev` escrever enquanto você
+está em outro terminal e ninguém ler o pty, o buffer enche e **o processo
+trava**. Redesenhar, esse sim, só quando o terminal visível muda.
+
+Teto: 6 terminais.
+
+**Medido**: um terminal escondido despejando ~200 KB drenou e terminou em ~1 s,
+e um servidor Node rodando escondido respondeu a um `curl` feito de outro
+terminal — que é exatamente o fluxo Express + cliente.
+
+### 8.2 Auto-close por linguagem, incluindo tag JSX — FEITA
+
+Hoje `auto_close` fecha `()`, `[]`, `{}`, `""` e `''` — igual em todo arquivo,
+com dois guardas já corretos que **não podem ser perdidos**: `at_word` (não
+fecha antes de uma letra) e `after_word` (não vira `don''t`). O `backspace`
+também apaga o par vazio de uma vez; qualquer par novo precisa entrar lá também.
+
+Vira uma tabela por linguagem, ao lado de `comment_syntax()` em `highlight.*`,
+que é onde o dado por linguagem já mora:
+
+| Linguagem | `"` | `'` | `` ` `` | tag |
+|---|---|---|---|---|
+| C, C++, Python, SQL, CSS, Make | sim | sim | não | não |
+| JavaScript (js/ts/jsx/tsx/vue/svelte) | sim | sim | **sim** | **sim** |
+| Shell | sim | sim | sim | não |
+| HTML | sim | sim | não | **sim** |
+| JSON | sim | não | não | não |
+| Markdown, texto puro | **não** | **não** | sim | não |
+
+Os pares `([{` valem em toda linguagem. Markdown e texto puro **não** fecham
+aspas: ali `'` é apóstrofo de prosa, não delimitador.
+
+**Tag**: ao digitar `>`, se o texto antes fecha uma tag de abertura, insere
+`</nome>`. Não fecha quando: é `</fechamento`, termina em `/` (`<br/>`), é
+comentário ou `<!DOCTYPE`, ou o nome é elemento vazio de HTML (`br`, `img`,
+`input`, `hr`, `meta`, `link`, …). `<>` vira `</>` (fragmento JSX).
+
+**A armadilha que quase passou**: sem cuidado, o genérico `Array<string>` do
+TypeScript viraria `Array<string></string>`. O guarda é o caractere **antes**
+do `<`: se for letra, `_`, `)` ou `]`, não é tag — é a mesma regra que o realce
+já usa para decidir se `<` abre tag em JSX. E o nome tem que começar colado no
+`<`, o que descarta `a < b`. Os dois casos estão testados.
+
+### 8.3 Realce do par de chaves — FEITA
+
+Vale mais em JS do que em C: uma cadeia de callbacks termina numa pilha de
+`});` e é ali que o aluno se perde.
+
+- **Sem par de cor novo**: os dois delimitadores ganham `A_BOLD | A_UNDERLINE`
+  por cima da cor de sintaxe que já têm. Funciona em qualquer tema e não
+  arrisca colidir com a seleção.
+- Casa quando o cursor está **em cima** do delimitador ou **logo depois** dele
+  (o caso de acabar de digitar).
+- **Ignora delimitador dentro de string e de comentário** usando o vetor de
+  cores que `Highlighter::highlight()` já devolve por byte — é o que evita
+  casar o `{` de `"a { b"`.
+- Precisa do estado do realce em linhas fora da faixa visível:
+  `update_highlight_states()` vira `hl_state_at(linha)`, que estende o cache
+  sob demanda. Varredura limitada a 2.000 linhas **e** 200 KB para cada lado —
+  um `{` sem fechamento num arquivo de 60 mil linhas não pode varrer tudo a
+  cada redesenho (medido: 1 tick de CPU ocioso nesse caso).
+- Opção `show_bracket_match` no `ted.conf`, ligada por padrão.

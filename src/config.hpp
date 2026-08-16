@@ -10,6 +10,7 @@ struct Config {
   bool auto_indent = true;    // mantem a indentacao ao apertar Enter
   bool show_line_numbers = true;
   bool auto_close = true;     // fecha (), [], {}, "" e '' automaticamente
+  bool show_bracket_match = true;  // destaca o par de chaves sob o cursor
   bool mouse = true;          // clique/rolagem do mouse
   int sidebar_width = 26;     // largura do painel de arquivos
   int terminal_height = 10;   // altura do painel do terminal

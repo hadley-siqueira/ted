@@ -228,6 +228,36 @@ CommentSyntax comment_syntax(Lang lang) {
   }
 }
 
+AutoCloseSyntax auto_close_syntax(Lang lang) {
+  AutoCloseSyntax a;
+  switch (lang) {
+    case Lang::JavaScript:      // cobre .js .mjs .cjs .ts .jsx .tsx .vue .svelte
+      a.backtick = true;        // `template ${literal}`
+      a.tags = true;            // JSX
+      break;
+    case Lang::Html:
+      a.tags = true;
+      break;
+    case Lang::Shell:
+      a.backtick = true;        // `comando` (substituicao)
+      break;
+    case Lang::Json:
+      a.single_quote = false;   // JSON nao tem string de aspas simples
+      break;
+    case Lang::Markdown:
+    case Lang::None:
+      // Prosa: aspas e apostrofo sao pontuacao. Fechar sozinho atrapalha mais
+      // do que ajuda ("nao e" nao pode virar "nao e''").
+      a.double_quote = false;
+      a.single_quote = false;
+      a.backtick = true;        // mas `codigo` entre crases vale a pena
+      break;
+    default:                    // C, C++, Python, SQL, CSS, Make
+      break;
+  }
+  return a;
+}
+
 // ---------------------------------------------------------------------------
 // Deteccao da linguagem pelo nome do arquivo
 // ---------------------------------------------------------------------------

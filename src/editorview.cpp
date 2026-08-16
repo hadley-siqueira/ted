@@ -28,6 +28,63 @@ int digits(int n) {
 const char* kOpen = "([{";
 const char* kClose = ")]}";
 
+// Tetos da busca pelo par de chaves: um arquivo grande com um "{" solto nao
+// pode fazer o editor varrer tudo a cada redesenho.
+constexpr int kBracketScanLines = 2000;
+constexpr long kBracketScanBytes = 200000;
+
+// Elementos HTML sem tag de fechamento - nao adianta fechar <br> nem <img>.
+bool is_void_element(const std::string& name) {
+  static const char* kVoid[] = {"area", "base",  "br",   "col",   "embed",
+                                "hr",   "img",   "input", "link", "meta",
+                                "source", "track", "wbr"};
+  std::string low;
+  for (char c : name) low += static_cast<char>(std::tolower((unsigned char)c));
+  for (const char* v : kVoid)
+    if (low == v) return true;
+  return false;
+}
+
+// O texto de 'line' ate 'upto' (o ponto onde o '>' vai entrar) termina uma tag
+// de ABERTURA? Devolve o nome da tag, "<>" para o fragmento JSX, ou "" quando
+// nao for caso de fechar.
+//
+// A regra do caractere antes do '<' e a mesma que o realce usa para JSX: so e
+// tag quando o '<' aparece onde um *valor* pode comecar. Sem isso, o generico
+// "Array<string>" do TypeScript viraria "Array<string></string>".
+std::string open_tag_at(const std::string& line, size_t upto) {
+  size_t lt = std::string::npos;
+  for (size_t i = upto; i-- > 0;) {
+    if (line[i] == '>') return std::string();   // ja fechou outra tag antes
+    if (line[i] == '<') { lt = i; break; }
+  }
+  if (lt == std::string::npos) return std::string();
+
+  if (lt > 0) {
+    const unsigned char before = static_cast<unsigned char>(line[lt - 1]);
+    if (std::isalnum(before) || before == '_' || before == ')' || before == ']')
+      return std::string();   // generico do TS, "a < b", etc.
+  }
+
+  const size_t p = lt + 1;
+  if (p == upto) return "<>";                   // fragmento JSX: <>
+  if (line[p] == '/' || line[p] == '!') return std::string();  // </div, <!--
+  if (line[upto - 1] == '/') return std::string();             // <br/>
+
+  // O nome tem que comecar colado no '<' (isso descarta "a < b").
+  if (!std::isalpha(static_cast<unsigned char>(line[p])) && line[p] != '_')
+    return std::string();
+  size_t e = p;
+  while (e < upto) {
+    const unsigned char c = static_cast<unsigned char>(line[e]);
+    if (std::isalnum(c) || c == '_' || c == '-' || c == '.' || c == ':') e++;
+    else break;
+  }
+  const std::string name = line.substr(p, e - p);
+  if (is_void_element(name)) return std::string();
+  return name;
+}
+
 }  // namespace
 
 EditorView::EditorView(std::shared_ptr<Document> doc) : doc_(std::move(doc)) {
@@ -353,7 +410,8 @@ void EditorView::backspace() {
         ensure_visible();
         return;
       }
-      if ((line[start] == '"' || line[start] == '\'') &&
+      // Apaga tambem o par vazio de aspas (inclusive a crase do JS/Markdown).
+      if (std::strchr("\"'`", line[start]) && line[start] != '\0' &&
           line[cursor_.byte] == line[start]) {
         doc_->erase(Pos{cursor_.line, start}, Pos{cursor_.line, cursor_.byte + 1});
         cursor_.byte = start;
@@ -751,11 +809,32 @@ bool EditorView::handle_key(const ui::KeyEvent& ev) {
 
   std::string s = utf8::encode(static_cast<uint32_t>(ev.ch));
 
-  // Fecha automaticamente parenteses/aspas.
+  // Fecha automaticamente parenteses/aspas/tags.
   if (g_config.auto_close && !has_selection() && s.size() == 1) {
     char c = s[0];
     const std::string& line = doc_->line(cursor_.line);
     char nextc = cursor_.byte < line.size() ? line[cursor_.byte] : '\0';
+
+    // Quais aspas esta linguagem fecha sozinha (veja auto_close_syntax).
+    const AutoCloseSyntax ac = auto_close_syntax(hl_.lang());
+    std::string aspas;
+    if (ac.double_quote) aspas += '"';
+    if (ac.single_quote) aspas += '\'';
+    if (ac.backtick) aspas += '`';
+
+    // <div> vira <div></div>, com o cursor entre as duas.
+    if (c == '>' && ac.tags) {
+      const std::string tag = open_tag_at(line, cursor_.byte);
+      if (!tag.empty()) {
+        const std::string fecha = (tag == "<>") ? "</>" : "</" + tag + ">";
+        insert_text(">" + fecha);
+        for (size_t k = 0; k < fecha.size(); k++)
+          cursor_.byte = utf8::prev(doc_->line(cursor_.line), cursor_.byte);
+        ensure_visible();
+        return true;
+      }
+    }
+
     const char* close_at = std::strchr(kClose, c);
     if (close_at && nextc == c) {  // ja tem o par: so anda por cima
       cursor_.byte = utf8::next(line, cursor_.byte);
@@ -770,7 +849,7 @@ bool EditorView::handle_key(const ui::KeyEvent& ev) {
       ensure_visible();
       return true;
     }
-    if ((c == '"' || c == '\'')) {
+    if (aspas.find(c) != std::string::npos) {
       if (nextc == c) {
         cursor_.byte = utf8::next(line, cursor_.byte);
         ensure_visible();
@@ -808,18 +887,96 @@ int EditorView::gutter_width() const {
   return digits(std::max(1, doc_->line_count())) + 2;
 }
 
-void EditorView::update_highlight_states() {
+int EditorView::hl_state_at(int line) {
   if (hl_version_ != doc_->version()) {
     hl_version_ = doc_->version();
     hl_states_.clear();
   }
   if (hl_states_.empty()) hl_states_.push_back(Highlighter::kNormal);
-  int need = std::min(doc_->line_count(), scroll_row_ + area_.h) + 1;
+  if (line < 0) return Highlighter::kNormal;
+
+  const int limite = std::min(line, doc_->line_count());
   std::vector<int> tmp;
-  while (static_cast<int>(hl_states_.size()) < need) {
-    int idx = static_cast<int>(hl_states_.size()) - 1;
-    int st = hl_.highlight(doc_->line(idx), hl_states_[idx], &tmp);
-    hl_states_.push_back(st);
+  while (static_cast<int>(hl_states_.size()) <= limite) {
+    const int idx = static_cast<int>(hl_states_.size()) - 1;
+    hl_states_.push_back(hl_.highlight(doc_->line(idx), hl_states_[idx], &tmp));
+  }
+  return (line < static_cast<int>(hl_states_.size())) ? hl_states_[line]
+                                                      : Highlighter::kNormal;
+}
+
+void EditorView::update_highlight_states() {
+  hl_state_at(std::min(doc_->line_count(), scroll_row_ + area_.h));
+}
+
+// Acha o par do delimitador que esta sob o cursor (ou logo atras dele, o caso
+// de acabar de digitar). Guarda as duas posicoes para o desenho destacar.
+//
+// Ignora delimitador dentro de string e de comentario usando o vetor de cores
+// que o realce ja devolve por byte - e o que evita casar o "{" de "a { b".
+void EditorView::update_bracket_match() {
+  bm_valid_ = false;
+  if (!g_config.show_bracket_match) return;
+
+  const std::string& line = doc_->line(cursor_.line);
+  auto e_delim = [](char ch) {
+    return ch != '\0' && (std::strchr(kOpen, ch) || std::strchr(kClose, ch));
+  };
+
+  size_t at = std::string::npos;
+  if (cursor_.byte < line.size() && e_delim(line[cursor_.byte])) {
+    at = cursor_.byte;
+  } else if (cursor_.byte > 0 && cursor_.byte <= line.size()) {
+    const size_t b = utf8::prev(line, cursor_.byte);
+    if (e_delim(line[b])) at = b;
+  }
+  if (at == std::string::npos) return;
+
+  const char aqui = line[at];
+  const char* o = std::strchr(kOpen, aqui);
+  const bool para_frente = (o != nullptr);
+  const char par = para_frente ? kClose[o - kOpen]
+                               : kOpen[std::strchr(kClose, aqui) - kClose];
+
+  std::vector<int> cores;
+  hl_.highlight(line, hl_state_at(cursor_.line), &cores);
+  auto e_codigo = [&cores](size_t i) {
+    if (i >= cores.size()) return true;
+    return cores[i] != ui::kSynString && cores[i] != ui::kSynComment;
+  };
+  if (!e_codigo(at)) return;   // o proprio delimitador esta em string/comentario
+
+  const int passo = para_frente ? 1 : -1;
+  const int limite = para_frente
+                         ? std::min(doc_->line_count() - 1,
+                                    cursor_.line + kBracketScanLines)
+                         : std::max(0, cursor_.line - kBracketScanLines);
+  int profundidade = 0;
+  long orcamento = kBracketScanBytes;
+
+  for (int l = cursor_.line; para_frente ? (l <= limite) : (l >= limite);
+       l += passo) {
+    const std::string& s = doc_->line(l);
+    if (l != cursor_.line) hl_.highlight(s, hl_state_at(l), &cores);
+
+    int i = (l == cursor_.line) ? static_cast<int>(at)
+                                : (para_frente ? 0 : static_cast<int>(s.size()) - 1);
+    while (para_frente ? (i < static_cast<int>(s.size())) : (i >= 0)) {
+      if (--orcamento < 0) return;
+      const char ch = s[i];
+      // Bytes de continuacao UTF-8 sao >= 0x80, entao nunca batem com ASCII.
+      if ((ch == aqui || ch == par) && e_codigo(static_cast<size_t>(i))) {
+        if (ch == aqui) {
+          profundidade++;
+        } else if (--profundidade == 0) {
+          bm_a_ = Pos{cursor_.line, at};
+          bm_b_ = Pos{l, static_cast<size_t>(i)};
+          bm_valid_ = true;
+          return;
+        }
+      }
+      i += passo;
+    }
   }
 }
 
@@ -848,6 +1005,7 @@ void EditorView::draw(const Rect& area, bool focused) {
   sync_to_doc();
   ensure_visible();
   update_highlight_states();
+  update_bracket_match();
   cursor_x_ = cursor_y_ = -1;
 
   const int gw = gutter_width();
@@ -933,6 +1091,11 @@ void EditorView::draw(const Rect& area, bool focused) {
       if (in_sel) attr = COLOR_PAIR(ui::kSelection);
       else if (in_hit) attr = COLOR_PAIR(ui::kSearchHit);
       else attr = COLOR_PAIR(pair ? pair : ui::kNormal);
+      // O par de delimitadores sob o cursor: negrito e sublinhado por cima da
+      // cor que ja tinham. Sem par de cor novo, funciona em qualquer tema.
+      if (bm_valid_ && ((l == bm_a_.line && i == bm_a_.byte) ||
+                        (l == bm_b_.line && i == bm_b_.byte)))
+        attr |= A_BOLD | A_UNDERLINE;
 
       int sx = area.x + gw + (col - scroll_col_);
       if (col + w > scroll_col_ && col - scroll_col_ < text_w) {

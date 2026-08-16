@@ -74,6 +74,21 @@ branco. Se todas as linhas selecionadas já estiverem comentadas, ele
 descomenta. Alguns terminais não enviam nada com `Ctrl+/` — nesses, use
 `Alt+C`.
 
+**Fechamento automático.** Com `auto_close` ligado, `(`, `[` e `{` ganham o par
+em qualquer arquivo. As aspas dependem da linguagem: em Markdown e texto puro
+elas **não** fecham sozinhas, porque ali `'` é apóstrofo de prosa e não
+delimitador. A crase fecha em JavaScript (template literal), Shell e Markdown.
+Em JSX, TSX, Vue, Svelte e HTML, digitar `>` no fim de uma tag de abertura
+escreve o fechamento: `<div>` vira `<div></div>` com o cursor no meio, e `<>`
+vira `<></>`. Ele não fecha tag vazia (`<br>`, `<img>`), tag já auto-fechada
+(`<img />`) nem genérico do TypeScript — `Array<string>` continua como está.
+
+**Par de chaves.** O `(`, `[` ou `{` sob o cursor (ou logo atrás dele) aparece
+em negrito e sublinhado junto com o seu par, mesmo que ele esteja dezenas de
+linhas adiante — útil para achar onde termina aquela pilha de `});`.
+Delimitador dentro de string ou de comentário é ignorado. Desligue com
+`show_bracket_match = false`.
+
 **TAB ou espaços?** Por padrão a tecla `Tab` insere espaços (`tab_width`, 4 por
 padrão) — mais previsível para quem está começando. Duas exceções e um escape:
 
@@ -104,6 +119,8 @@ padrão) — mais previsível para quem está começando. Duas exceções e um e
 | Tecla | O que faz |
 |---|---|
 | `F2` / `F3` / `F4` | focar arquivos / editor / terminal |
+| `Alt+T` | abrir outro terminal (até 6) |
+| `F4` (de novo) | alternar entre os terminais abertos |
 | `F6` | alternar entre as três regiões |
 | `Alt+V` | dividir a tela: painel novo **ao lado** |
 | `Alt+H` | dividir a tela: painel novo **embaixo** |
@@ -177,7 +194,13 @@ seleciona a palavra. Se você preferir usar a seleção do seu próprio terminal
 para copiar (`Ctrl+Shift+C`), aperte `F9` para desligar o mouse do editor.
 
 ### Terminal embutido
-Ele roda o seu `$SHELL` de verdade na pasta do projeto. Com o foco nele
+Ele roda o seu `$SHELL` de verdade na pasta do projeto. **`Alt+T` abre outro
+terminal** (até seis) e `F4`, quando o foco já está no terminal, passa para o
+próximo — as abas numeradas aparecem na barra do painel. Serve para o caso
+normal de um projeto web: `npm run dev` num, `node server.js` noutro, e um
+terceiro livre para `npm install`, `git` ou `curl`. Um terminal que você deixou
+para trás continua rodando e recebendo a saída normalmente; `Alt+W` com o foco
+no terminal fecha o terminal atual. Com o foco nele
 (`F4`), **todas as teclas vão para o shell** — inclusive `Ctrl+C`, `Ctrl+D` e
 `Ctrl+Z`. As exceções são as teclas de função (`F1`–`F10`) e `Alt+…`, que
 continuam sendo do editor, para você conseguir sair de lá.
@@ -256,7 +279,8 @@ abaixo.
 | `tab_width` | 1 a 16 | `4` | de quantas colunas é um nível de indentação |
 | `use_spaces` | `true`/`false` | `true` | `Tab` insere espaços em vez do caractere TAB |
 | `auto_indent` | `true`/`false` | `true` | `Enter` mantém a indentação da linha atual |
-| `auto_close` | `true`/`false` | `true` | fecha `()`, `[]`, `{}`, `""` e `''` sozinho |
+| `auto_close` | `true`/`false` | `true` | fecha `()`, `[]`, `{}`, aspas e tags sozinho |
+| `show_bracket_match` | `true`/`false` | `true` | destaca o par de `()`, `[]`, `{}` sob o cursor |
 | `line_numbers` | `true`/`false` | `true` | mostra a coluna com os números de linha |
 | `mouse` | `true`/`false` | `true` | clique, arrasto e roda do mouse dentro do editor |
 | `sidebar_width` | ≥ 10 | `26` | largura inicial da barra de arquivos |

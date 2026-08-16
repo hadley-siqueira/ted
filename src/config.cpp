@@ -49,6 +49,7 @@ void load_config() {
     else if (key == "auto_indent") g_config.auto_indent = as_bool();
     else if (key == "line_numbers") g_config.show_line_numbers = as_bool();
     else if (key == "auto_close") g_config.auto_close = as_bool();
+    else if (key == "show_bracket_match") g_config.show_bracket_match = as_bool();
     else if (key == "mouse") g_config.mouse = as_bool();
     else if (key == "sidebar_width") g_config.sidebar_width = as_int();
     else if (key == "terminal_height") g_config.terminal_height = as_int();

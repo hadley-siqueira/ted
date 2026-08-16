@@ -98,6 +98,9 @@ class EditorView {
   void begin_move(bool extend);
   void sync_to_doc();
   void update_highlight_states();
+  // Estado do realce no inicio de uma linha, estendendo o cache ate la.
+  int hl_state_at(int line);
+  void update_bracket_match();
   std::string indent_of(const std::string& line) const;
 
   std::shared_ptr<Document> doc_;
@@ -119,4 +122,8 @@ class EditorView {
   // Cache do estado do realce no *inicio* de cada linha.
   std::vector<int> hl_states_;
   size_t hl_version_ = 0;
+
+  // Par de delimitadores sob o cursor, destacado no desenho.
+  bool bm_valid_ = false;
+  Pos bm_a_, bm_b_;
 };

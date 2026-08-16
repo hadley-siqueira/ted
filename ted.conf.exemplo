@@ -23,7 +23,8 @@ theme = default
 tab_width = 4          # largura visual do TAB
 use_spaces = true      # TAB insere espacos (recomendado para a turma)
 auto_indent = true     # mantem a indentacao ao apertar Enter
-auto_close = true      # fecha (), [], {}, "" e '' automaticamente
+auto_close = true      # fecha (), [], {}, aspas e tags JSX/HTML automaticamente
+show_bracket_match = true   # destaca o par de (), [], {} sob o cursor
 line_numbers = true    # mostra os numeros das linhas
 mouse = true           # clique, arrasto e roda do mouse
 
