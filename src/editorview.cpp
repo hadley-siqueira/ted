@@ -367,6 +367,9 @@ void EditorView::insert_newline() {
     while (!before.empty() && (before.back() == ' ' || before.back() == '\t'))
       before.pop_back();
     bool deeper = !before.empty() && (before.back() == '{' || before.back() == ':');
+    // Haard: 'def nome : tipo' abre o corpo sem terminar em ':'.
+    if (hl_.lang() == Lang::Haard && before.compare(ind.size(), 4, "def ") == 0)
+      deeper = true;
     ins += ind;
     if (deeper) ins += indent_unit();
     // Se o cursor esta entre '{' e '}', a chave de fechar desce mais uma linha.
@@ -1003,7 +1006,15 @@ void EditorView::sync_to_doc() {
 void EditorView::draw(const Rect& area, bool focused) {
   area_ = area;
   sync_to_doc();
-  ensure_visible();
+  // Rolar com a roda do mouse move so a vista, nao o cursor. Se chamassemos
+  // ensure_visible() sempre, a vista voltaria para o cursor a cada quadro e a
+  // rolagem emperraria assim que o cursor encostasse na borda da tela.
+  if (cursor_ != drawn_cursor_ || area.x != drawn_area_.x ||
+      area.y != drawn_area_.y || area.w != drawn_area_.w ||
+      area.h != drawn_area_.h)
+    ensure_visible();
+  drawn_cursor_ = cursor_;
+  drawn_area_ = area;
   update_highlight_states();
   update_bracket_match();
   cursor_x_ = cursor_y_ = -1;

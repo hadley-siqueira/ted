@@ -93,6 +93,7 @@ std::string lang_name(Lang l) {
     case Lang::OCaml: return "OCaml";
     case Lang::Verilog: return "Verilog";
     case Lang::Vhdl: return "VHDL";
+    case Lang::Haard: return "Haard";
     default: return "Texto";
   }
 }

@@ -116,6 +116,10 @@ class EditorView {
   int scroll_col_ = 0;
   Rect area_;
   int cursor_x_ = -1, cursor_y_ = -1;
+  // Cursor e area no ultimo draw(): so puxamos a rolagem de volta para o
+  // cursor se um dos dois mudou (senao a roda do mouse "trava" na borda).
+  Pos drawn_cursor_{-1, 0};
+  Rect drawn_area_;
 
   std::string search_;
 

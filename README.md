@@ -238,6 +238,7 @@ O realce sai pela extensão do arquivo, sem configuração:
 | C / C++ | `.c` `.h` / `.cpp` `.cc` `.cxx` `.hpp` `.hh` `.hxx` `.ino` |
 | C# | `.cs` `.csx` |
 | Python | `.py` `.pyw` |
+| Haard | `.hd` |
 | JavaScript / TypeScript | `.js` `.mjs` `.cjs` `.ts` `.jsx` `.tsx` |
 | Ruby | `.rb` `.rake` `.gemspec` `.ru` |
 | ERB | `.erb` `.rhtml` |

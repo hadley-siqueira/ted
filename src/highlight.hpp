@@ -10,7 +10,7 @@
 
 enum class Lang {
   None, C, Cpp, Python, JavaScript, Shell, Make, Markdown, Json, Html, Css, Sql,
-  Ruby, Erb, CSharp, Haskell, OCaml, Verilog, Vhdl
+  Ruby, Erb, CSharp, Haskell, OCaml, Verilog, Vhdl, Haard
 };
 
 // Como se comenta em cada linguagem. 'line' vazio significa que a linguagem
@@ -66,6 +66,8 @@ class Highlighter {
     kMlComment,         // (* ... *) do OCaml
     kCsVerbatim,        // @"..." do C#, que pode atravessar linhas
     kErbTag,            // <% ... %> do ERB ainda sem fechar
+    kHdString1,         // '...' do Haard, que pode atravessar linhas
+    kHdString2,         // "..." do Haard, idem
   };
 
   // Preenche 'out' (uma cor por byte, 0 = cor normal) e devolve o estado

@@ -54,4 +54,8 @@ class FileTree {
   int scroll_ = 0;
   bool show_hidden_ = false;
   Rect area_;
+  // Selecao e altura no ultimo draw(): a roda do mouse move so a vista, entao
+  // o draw() so volta para a selecao se uma das duas mudou.
+  int drawn_selected_ = -1;
+  int drawn_h_ = -1;
 };

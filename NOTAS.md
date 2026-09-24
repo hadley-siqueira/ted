@@ -115,6 +115,7 @@ Cada uma dessas linhas existe porque um bug real aconteceu:
 | Painel estreito escondia a aba ativa (mostrava a aba 0 e `>`) | `draw_tabbar()` desenhava sempre a partir da primeira aba | `draw_tabbar()` rola até a ativa, com `<`/`>` |
 | Com o foco no terminal, a aba de terminal ativa ficava igual às outras | `kTabActive` e `kPaneTitleActive` são **o mesmo par** (`accent_fg`/`accent`): a aba ativa sumia dentro do fundo da barra | `draw_terminal_tabs()` em `app.cpp` |
 | Shell encerrado (`exit`/`Ctrl+D`) continuava na barra de terminais | ninguém removia o `Terminal` parado da lista | `reap_terminals()` em `app.cpp` |
+| Roda do mouse "emperrava": a rolagem parava quando o cursor chegava à borda e só as setas destravavam | `draw()` chamava `ensure_visible()` em todo quadro, puxando a vista de volta para o cursor | `EditorView::draw()` e `FileTree::draw()` só reajustam se o cursor/seleção ou a área mudou desde o último desenho |
 
 ---
 
@@ -165,8 +166,8 @@ g++ -std=c++17 -O2 -Isrc -o /tmp/fuzz_hl tools_fuzz_hl.cpp \
 /tmp/fuzz_hl src/*.cpp src/*.hpp Makefile README.md NOTAS.md
 ```
 
-Última execução: 167 mil linhas (19 linguagens × 32 arquivos) sem nenhum
-travamento. **Rode sempre que mexer em `highlight.cpp`** — e com amostras da
+Última execução: 923 mil linhas (20 linguagens × 983 arquivos, incluindo os
+`.hd` de `~/Projetos/haard`) sem nenhum travamento. **Rode sempre que mexer em `highlight.cpp`** — e com amostras da
 linguagem nova, porque os fontes do próprio projeto não exercitam sintaxe de
 Ruby, Haskell, OCaml, Verilog nem VHDL.
 

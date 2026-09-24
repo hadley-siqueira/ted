@@ -77,6 +77,14 @@ std::string lower(const std::string& s) {
 // ---------------------------------------------------------------------------
 
 const std::set<std::string>& keywords_for(Lang lang) {
+  // As palavras da tabela do scanner do compilador (src/haard/scanner), menos
+  // os tipos primitivos, que ficam em types_for().
+  static const std::set<std::string> haard_kw = {
+      "and", "as", "break", "case", "class", "const", "continue", "default",
+      "def", "delete", "elif", "else", "enum", "false", "for", "goto", "if",
+      "import", "in", "label", "let", "new", "not", "null", "operator", "or",
+      "pass", "return", "sizeof", "struct", "super", "switch", "this", "true",
+      "union", "while", "yield"};
   static const std::set<std::string> c_kw = {
       "auto", "break", "case", "const", "continue", "default", "do", "else",
       "enum", "extern", "for", "goto", "if", "inline", "register", "restrict",
@@ -194,6 +202,7 @@ const std::set<std::string>& keywords_for(Lang lang) {
     case Lang::C: return c_kw;
     case Lang::Cpp: return cpp_kw;
     case Lang::Python: return py_kw;
+    case Lang::Haard: return haard_kw;
     case Lang::JavaScript: return js_kw;
     case Lang::Shell:
     case Lang::Make: return sh_kw;
@@ -219,6 +228,9 @@ const std::set<std::string>& types_for(Lang lang) {
       "short", "signed", "size_t", "string", "unsigned", "void", "wchar_t",
       "vector", "map", "set", "pair", "int8_t", "int16_t", "int32_t",
       "int64_t", "uint8_t", "uint16_t", "uint32_t", "uint64_t"};
+  static const std::set<std::string> haard_types = {
+      "bool", "char", "f32", "f64", "i8", "i16", "i32", "i64", "isize",
+      "symbol", "u8", "u16", "u32", "u64", "usize", "void"};
   static const std::set<std::string> py_types = {
       "bool", "bytes", "dict", "float", "int", "list", "object", "set", "str",
       "tuple", "print", "len", "range", "input", "open"};
@@ -287,6 +299,7 @@ const std::set<std::string>& types_for(Lang lang) {
     case Lang::C: return c_types;
     case Lang::Cpp: return cpp_types;
     case Lang::Python: return py_types;
+    case Lang::Haard: return haard_types;
     case Lang::JavaScript: return js_types;
     case Lang::Ruby:
     case Lang::Erb: return ruby_types;
@@ -333,6 +346,41 @@ bool jsx_context(const std::string& line, size_t from, size_t lt) {
   return true;   // comeco do trecho: quase sempre e JSX indentado
 }
 
+// Haard: strings entre " ou ' podem atravessar linhas, e o ${expr} dentro
+// delas e codigo. Pinta a partir de 'j' (primeiro byte depois da aspa de
+// abertura, ou o comeco da linha numa continuacao) e devolve o indice logo
+// depois da aspa de fechamento, ou npos se a string segue na proxima linha.
+size_t scan_haard_string(const std::string& line, size_t paint_from, size_t j,
+                         size_t to, char quote, std::vector<int>* out) {
+  size_t seg = paint_from;
+  while (j < to && line[j] != quote) {
+    if (line[j] == '\\') { j += 2; continue; }
+    if (line[j] == '$' && j + 1 < to && line[j + 1] == '{') {
+      paint(out, seg, j, ui::kSynString);
+      // As chaves contam o aninhamento, igual ao scanner do compilador: um
+      // '}' de um bloco interno nao fecha a interpolacao.
+      size_t k = j + 2;
+      int depth = 0;
+      while (k < to && !(line[k] == '}' && depth == 0)) {
+        if (line[k] == '{') depth++;
+        else if (line[k] == '}') depth--;
+        k++;
+      }
+      k = std::min(k + 1, to);
+      paint(out, j, k, ui::kSynPreproc);
+      seg = j = k;
+      continue;
+    }
+    j++;
+  }
+  if (j >= to) {
+    paint(out, seg, to, ui::kSynString);
+    return std::string::npos;
+  }
+  paint(out, seg, j + 1, ui::kSynString);
+  return j + 1;
+}
+
 }  // namespace
 
 CommentSyntax comment_syntax(Lang lang) {
@@ -343,6 +391,7 @@ CommentSyntax comment_syntax(Lang lang) {
     case Lang::Verilog:
     case Lang::JavaScript: return {"//", "/*", "*/"};
     case Lang::Python:
+    case Lang::Haard:
     case Lang::Shell:
     case Lang::Make: return {"#", "", ""};
     case Lang::Ruby: return {"#", "=begin", "=end"};
@@ -412,6 +461,7 @@ Lang Highlighter::detect(const std::string& path) {
       e == "hxx" || e == "ino")
     return Lang::Cpp;
   if (e == "py" || e == "pyw") return Lang::Python;
+  if (e == "hd") return Lang::Haard;
   if (e == "js" || e == "mjs" || e == "cjs" || e == "ts" || e == "jsx" ||
       e == "tsx")
     return Lang::JavaScript;
@@ -563,7 +613,8 @@ int Highlighter::scan_code(const std::string& line, size_t from, size_t to,
   const bool ocaml = (lang == Lang::OCaml);
   const bool vhdl = (lang == Lang::Vhdl);
   const bool shell = (lang == Lang::Shell);
-  const bool hash_comment = lang == Lang::Python || shell ||
+  const bool haard = (lang == Lang::Haard);
+  const bool hash_comment = lang == Lang::Python || haard || shell ||
                             lang == Lang::Make || ruby;
   const bool dash_comment = sql || haskell || vhdl;   // -- ate o fim da linha
   const bool block_comment = c_like || sql;           // /* ... */
@@ -594,6 +645,12 @@ int Highlighter::scan_code(const std::string& line, size_t from, size_t to,
     }
     paint(out, i, end + 3, ui::kSynString);
     i = end + 3;
+    state = kNormal;
+  } else if (state == kHdString1 || state == kHdString2) {
+    const char q = (state == kHdString1) ? '\'' : '"';
+    size_t end = scan_haard_string(line, i, i, to, q, out);
+    if (end == std::string::npos) return state;
+    i = end;
     state = kNormal;
   } else if (state == kJsTemplate) {
     size_t j = i;
@@ -865,6 +922,38 @@ int Highlighter::scan_code(const std::string& line, size_t from, size_t to,
       }
     }
 
+    // Haard: strings de varias linhas com ${interpolacao}, simbolos (:nome,
+    // :'com espacos') e parametros declarados com @ (@valor : i32).
+    if (haard && (c == '"' || c == '\'')) {
+      size_t end = scan_haard_string(line, i, i + 1, to, c, out);
+      if (end == std::string::npos) return c == '\'' ? kHdString1 : kHdString2;
+      i = end;
+      continue;
+    }
+    // O '::' e escopo: como andamos byte a byte, o segundo ':' de 'A::b' nao
+    // pode abrir um simbolo.
+    if (haard && c == ':' && i + 1 < to && (i == from || line[i - 1] != ':') &&
+        (ident_start(line[i + 1]) || line[i + 1] == '\'' || line[i + 1] == '"')) {
+      size_t j = i + 1;
+      if (line[j] == '\'' || line[j] == '"') {
+        const char q = line[j++];
+        while (j < to && line[j] != q) j += (line[j] == '\\') ? 2 : 1;
+        j = std::min(j + 1, to);
+      } else {
+        while (j < to && ident_char(line[j])) j++;
+      }
+      paint(out, i, j, ui::kSynNumber);
+      i = j;
+      continue;
+    }
+    if (haard && c == '@') {
+      size_t j = i + 1;
+      while (j < to && ident_char(line[j])) j++;
+      paint(out, i, j, ui::kSynPreproc);
+      i = j;
+      continue;
+    }
+
     // Strings e caracteres.
     if (c == '"' || (c == '\'' && (!narrow_char || is_char_literal(line, i, to)))) {
       size_t j = i + 1;
@@ -906,9 +995,28 @@ int Highlighter::scan_code(const std::string& line, size_t from, size_t to,
     if (std::isdigit(static_cast<unsigned char>(c)) &&
         (i == from || !ident_char(line[i - 1]))) {
       size_t j = i;
-      while (j < to && (std::isalnum(static_cast<unsigned char>(line[j])) ||
-                        line[j] == '.' || line[j] == 'x' || line[j] == 'X'))
-        j++;
+      if (haard) {
+        // 1_000, 0xFF, 1.5e-3 - mas o '..' de '0..10' e o operador de faixa.
+        while (j < to) {
+          const char d = line[j];
+          if (std::isalnum(static_cast<unsigned char>(d)) || d == '_') {
+            j++;
+            if ((d == 'e' || d == 'E') && j + 1 < to &&
+                (line[j] == '+' || line[j] == '-') &&
+                std::isdigit(static_cast<unsigned char>(line[j + 1])) &&
+                !(line[i] == '0' && i + 1 < to && (line[i + 1] == 'x' || line[i + 1] == 'X')))
+              j++;
+          } else if (d == '.' && j + 1 < to && line[j + 1] != '.') {
+            j++;
+          } else {
+            break;
+          }
+        }
+      } else {
+        while (j < to && (std::isalnum(static_cast<unsigned char>(line[j])) ||
+                          line[j] == '.' || line[j] == 'x' || line[j] == 'X'))
+          j++;
+      }
       paint(out, i, j, ui::kSynNumber);
       i = j;
       continue;
@@ -930,11 +1038,12 @@ int Highlighter::scan_code(const std::string& line, size_t from, size_t to,
         paint(out, i, j, ui::kSynKeyword);
       } else if (types.count(word)) {
         paint(out, i, j, ui::kSynType);
-      } else if ((ruby || haskell || ocaml) &&
+      } else if ((ruby || haskell || ocaml || haard) &&
                  std::isupper(static_cast<unsigned char>(c))) {
-        // Nessas tres a maiuscula tem significado: constante e classe no Ruby,
-        // tipo e construtor em Haskell, modulo e construtor em OCaml. Em C# e
-        // nas de hardware nao ha essa convencao, entao a regra nao vale la.
+        // Nessas a maiuscula tem significado: constante e classe no Ruby,
+        // tipo e construtor em Haskell, modulo e construtor em OCaml, classe
+        // no Haard (String, List<T>). Em C# e nas de hardware nao ha essa
+        // convencao, entao a regra nao vale la.
         paint(out, i, j, ui::kSynType);
       }
       i = j;

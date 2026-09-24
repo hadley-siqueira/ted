@@ -347,7 +347,9 @@ void FileTree::scroll_by(int lines) {
 
 void FileTree::draw(const Rect& area, bool focused) {
   area_ = area;
-  ensure_visible();
+  if (selected_ != drawn_selected_ || area.h != drawn_h_) ensure_visible();
+  drawn_selected_ = selected_;
+  drawn_h_ = area.h;
 
   for (int row = 0; row < area.h; row++) {
     int y = area.y + row;

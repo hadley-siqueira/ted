@@ -30,7 +30,7 @@ extern "C" void on_alarm(int) {
 int main(int argc, char** argv) {
   std::signal(SIGALRM, on_alarm);
 
-  const int kNumLangs = 19;   // ate Lang::Vhdl
+  const int kNumLangs = 20;   // ate Lang::Haard
   long total_linhas = 0;
 
   for (int a = 1; a < argc; a++) {
