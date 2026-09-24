@@ -368,7 +368,10 @@ void EditorView::insert_newline() {
       before.pop_back();
     bool deeper = !before.empty() && (before.back() == '{' || before.back() == ':');
     // Haard: 'def nome : tipo' abre o corpo sem terminar em ':'.
-    if (hl_.lang() == Lang::Haard && before.compare(ind.size(), 4, "def ") == 0)
+    // Numa linha so de indentacao, 'before' fica vazio (menor que 'ind') e o
+    // compare() lancaria std::out_of_range.
+    if (hl_.lang() == Lang::Haard && before.size() > ind.size() &&
+        before.compare(ind.size(), 4, "def ") == 0)
       deeper = true;
     ins += ind;
     if (deeper) ins += indent_unit();
